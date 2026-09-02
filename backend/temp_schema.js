@@ -1,0 +1,1 @@
+const fs = require('fs'); const db = require('./src/db').default; async function run() { try { const res = await db.query('DESCRIBE role_permissions'); console.log(JSON.stringify(res[0], null, 2)); } catch(e) { console.error(e); } process.exit(0); } run();

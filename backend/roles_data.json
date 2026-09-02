@@ -1,0 +1,29 @@
+[
+  {
+    "id": 1,
+    "name": "SUPER_ADMIN",
+    "description": "Super Administrator dengan akses penuh",
+    "is_system": 1,
+    "instansi_id": null,
+    "created_at": "2026-04-06T01:06:03.000Z",
+    "updated_at": "2026-04-06T01:06:03.000Z"
+  },
+  {
+    "id": 2,
+    "name": "ADMIN",
+    "description": "Administrator instansi",
+    "is_system": 1,
+    "instansi_id": null,
+    "created_at": "2026-04-06T01:06:03.000Z",
+    "updated_at": "2026-04-06T01:06:03.000Z"
+  },
+  {
+    "id": 3,
+    "name": "askara",
+    "description": null,
+    "is_system": 0,
+    "instansi_id": null,
+    "created_at": "2026-04-09T02:44:27.000Z",
+    "updated_at": "2026-04-09T02:44:27.000Z"
+  }
+]

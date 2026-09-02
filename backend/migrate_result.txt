@@ -1,0 +1,79 @@
+﻿[dotenv@17.2.3] injecting env (7) from .env -- tip: ΓÜÖ∩╕Å  write to custom object with { processEnv: myObject }
+≡ƒöî Menghubungkan ke database...
+   Host: 103.92.209.102 | DB: adms_absensi
+
+Γ£à Terhubung!
+
+≡ƒôï [1/21] instansi
+   + Kolom ditambah: instansi.updated_at
+≡ƒôï [2/21] roles
+   Γ£à Tabel dibuat: roles
+≡ƒôï [3/21] role_permissions
+   Γ£à Tabel dibuat: role_permissions
+≡ƒôï [4/21] admin
+   + Kolom ditambah: admin.role_id
+   + Kolom ditambah: admin.updated_at
+≡ƒôï [5/21] app_users
+   Γ£à Tabel dibuat: app_users
+≡ƒôï [6/21] mesin
+   + Kolom ditambah: mesin.updated_at
+≡ƒôï [7/21] departemen
+   + Kolom ditambah: departemen.instansi_id
+≡ƒôï [8/21] shifts
+≡ƒôï [9/21] karyawan
+   + Kolom ditambah: karyawan.updated_at
+≡ƒôï [10/21] absensi
+   + Kolom ditambah: absensi.karyawan_id
+≡ƒôï [11/21] mobile_absensi
+   Γ£à Tabel dibuat: mobile_absensi
+   + Index ditambah: mobile_absensi.user_date_unique
+≡ƒôï [12/21] rekap_absensi
+   + Index ditambah: rekap_absensi.karyawan_tanggal_unique
+≡ƒôï [13/21] holidays
+≡ƒôï [14/21] jenis_cuti
+   Γ£à Tabel dibuat: jenis_cuti
+≡ƒôï [15/21] cuti
+   Γ£à Tabel dibuat: cuti
+≡ƒôï [16/21] lembur
+   Γ£à Tabel dibuat: lembur
+≡ƒôï [17/21] karyawan_jadwal
+   Γ£à Tabel dibuat: karyawan_jadwal
+   + Index ditambah: karyawan_jadwal.karyawan_tanggal_unique
+≡ƒôï [18/21] employee_shifts
+   Γ£à Tabel dibuat: employee_shifts
+≡ƒôï [19/21] jadwal_kerja
+   Γ£à Tabel dibuat: jadwal_kerja
+≡ƒôï [20/21] pengumuman
+   Γ£à Tabel dibuat: pengumuman
+≡ƒôï [21/21] audit_logs
+   + Kolom ditambah: audit_logs.admin_id
+   + Kolom ditambah: audit_logs.admin_nama
+
+ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
+≡ƒôè Tabel yang ada di database setelah migrasi:
+    1. absensi
+    2. admin
+    3. app_users
+    4. audit_logs
+    5. cuti
+    6. departemen
+    7. employee_shifts
+    8. holidays
+    9. instansi
+   10. jadwal_kerja
+   11. jenis_cuti
+   12. karyawan
+   13. karyawan_jadwal
+   14. lembur
+   15. mesin
+   16. mobile_absensi
+   17. pengumuman
+   18. rekap_absensi
+   19. role_permissions
+   20. roles
+   21. shifts
+
+≡ƒÄë Migrasi database selesai!
+   Semua tabel sudah disesuaikan dengan kode backend.
+
+≡ƒöî Koneksi ditutup.
