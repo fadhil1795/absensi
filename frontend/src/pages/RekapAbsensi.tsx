@@ -415,7 +415,7 @@ const RekapAbsensi = () => {
                     </div>
 
                     <button
-                        onClick={fetchData}
+                        onClick={() => fetchData(true)}
                         disabled={loading}
                         className={`flex items-center gap-2 px-4 py-2 ${isDarkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-200 hover:bg-gray-300 text-gray-800'} text-white rounded-lg transition-colors text-sm`}
                     >
