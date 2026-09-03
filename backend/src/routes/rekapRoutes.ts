@@ -15,6 +15,10 @@ const formatDate = (date: Date) => {
     return `${y}-${m}-${d}`;
 };
 
+// Throttle: track last auto-sync time per instansi (max 1x per 5 menit)
+const lastAutoSyncTime = new Map<number, number>();
+const AUTO_SYNC_THROTTLE_MS = 5 * 60 * 1000; // 5 menit
+
 // Cron trigger for Vercel: POST/GET /cron
 router.all('/cron', async (req: any, res) => {
     const cronSecret = process.env.CRON_SECRET;
@@ -128,6 +132,30 @@ router.post('/process', authenticate, async (req: any, res) => {
 // 2. GET REKAP (GET /)
 router.get('/', authenticate, async (req: any, res) => {
     const { start_date, end_date, instansi_id } = req.query;
+
+    // === AUTO-SYNC BACKGROUND (non-blocking, throttled 5 menit) ===
+    const today = formatDate(new Date());
+    const endDateParam = (end_date as string) || today;
+    if (endDateParam >= today) {
+        const syncInstansiId: number | null = req.user.role !== 'SUPER_ADMIN'
+            ? req.user.instansi_id
+            : (instansi_id ? Number(instansi_id) : null);
+
+        if (syncInstansiId) {
+            const lastSync = lastAutoSyncTime.get(syncInstansiId) || 0;
+            if (Date.now() - lastSync >= AUTO_SYNC_THROTTLE_MS) {
+                lastAutoSyncTime.set(syncInstansiId, Date.now());
+                const yesterday = formatDate(new Date(Date.now() - 86400000));
+                setImmediate(() => {
+                    rekapService.processRekapRange(syncInstansiId, yesterday, today)
+                        .then(count => console.log(`[AutoSync GET] Instansi ${syncInstansiId}: ${count} records synced.`))
+                        .catch(err => console.error('[AutoSync GET] Error:', err));
+                });
+                console.log(`[AutoSync GET] Triggered for Instansi ${syncInstansiId} (${yesterday} → ${today})`);
+            }
+        }
+    }
+    // === END AUTO-SYNC ===
 
     let sql = `
         SELECT r.*, r.jam_keluar as jam_pulang, k.nama as karyawan_nama, k.nik as karyawan_nik, s.nama as shift_nama, d.nama as departemen_nama

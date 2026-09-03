@@ -32,10 +32,10 @@ export function startAutoSync() {
         void runSync();
     }, 5000);
 
-    // Then run every 1 hour (3600000 ms).
+    // Jalankan setiap 5 menit — cukup untuk kebutuhan realtime absensi harian.
     intervalTimer = setInterval(() => {
         void runSync();
-    }, 3600000);
+    }, 5 * 60 * 1000);
 }
 
 export async function triggerAutoSyncNow() {

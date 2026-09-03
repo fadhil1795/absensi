@@ -59,6 +59,8 @@ const RekapAbsensi = () => {
     const [error, setError] = useState('');
     const [successMsg, setSuccessMsg] = useState('');
     const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+    const [countdown, setCountdown] = useState(30);
+    const [isSyncing, setIsSyncing] = useState(false);
 
     const token = localStorage.getItem('token');
 
@@ -200,10 +202,14 @@ const RekapAbsensi = () => {
         fetchShifts();
     }, []);
 
-    // Fetch Data
-    const fetchData = async () => {
-        setLoading(true);
-        setError('');
+    // Fetch Data (showLoading=false untuk auto-refresh diam-diam)
+    const fetchData = async (showLoading = true) => {
+        if (showLoading) {
+            setLoading(true);
+            setError('');
+        } else {
+            setIsSyncing(true);
+        }
         try {
             const params = new URLSearchParams();
             if (startDate) params.append('start_date', startDate);
@@ -211,7 +217,8 @@ const RekapAbsensi = () => {
 
             if (activeTab === 'personal') {
                 if (!selectedKaryawanID) {
-                    setLoading(false);
+                    if (showLoading) setLoading(false);
+                    else setIsSyncing(false);
                     return;
                 }
                 params.append('karyawan_id', selectedKaryawanID);
@@ -229,7 +236,7 @@ const RekapAbsensi = () => {
                 setData(logsRes.data);
 
             } else if (activeTab === 'detail') {
-                if (selectedShift) params.append('shift_id', selectedShift); // Pass Shift Filter
+                if (selectedShift) params.append('shift_id', selectedShift);
                 const response = await axios.get(`${API_BASE_URL}/api/rekap?${params.toString()}`, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
@@ -241,11 +248,13 @@ const RekapAbsensi = () => {
                 setSummaryData(response.data);
             }
             setLastUpdated(new Date());
+            setCountdown(30); // reset countdown setelah fetch selesai
         } catch (err) {
             console.error(err);
-            setError('Failed to fetch data');
+            if (showLoading) setError('Failed to fetch data');
         } finally {
-            setLoading(false);
+            if (showLoading) setLoading(false);
+            else setIsSyncing(false);
         }
     };
 
@@ -256,9 +265,21 @@ const RekapAbsensi = () => {
     }, [activeTab, selectedKaryawanID, selectedShift, startDate, endDate]);
 
     useEffect(() => {
-        const interval = setInterval(fetchData, 30000);
+        const interval = setInterval(() => fetchData(false), 30000); // silent auto-refresh
         return () => clearInterval(interval);
     }, [activeTab, selectedKaryawanID, selectedShift, startDate, endDate]);
+
+    // Countdown 30 → 0 setiap detik, reset saat lastUpdated berubah
+    useEffect(() => {
+        setCountdown(30);
+    }, [lastUpdated]);
+
+    useEffect(() => {
+        const timer = setInterval(() => {
+            setCountdown(prev => (prev > 0 ? prev - 1 : 0));
+        }, 1000);
+        return () => clearInterval(timer);
+    }, []);
 
     // Helper for Personal Stats Card
     const StatCard = ({ title, value, colorClass }: { title: string, value: number, colorClass: string }) => (
@@ -276,8 +297,27 @@ const RekapAbsensi = () => {
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
                     <h1 className={`text-2xl font-bold ${theme.headingColor}`}>Rekap Absensi Shift</h1>
-                    <p className={`${theme.subTextColor} text-sm mt-1`}>View attendance data synced automatically from real-time scans. No manual process needed.</p>
-                    <p className={`${theme.subTextColor} text-xs mt-1`}>Last sync: {format(lastUpdated, 'HH:mm:ss')}</p>
+                    <p className={`${theme.subTextColor} text-sm mt-1`}>Data absensi disinkronkan otomatis. Tidak perlu klik Proses.</p>
+                    <div className="flex items-center gap-3 mt-1.5">
+                        <span className={`text-xs ${theme.subTextColor}`}>Last sync: {format(lastUpdated, 'HH:mm:ss')}</span>
+                        <span className="flex items-center gap-1 text-emerald-400 text-xs font-semibold">
+                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse inline-block"></span>
+                            LIVE
+                        </span>
+                        {isSyncing && (
+                            <span className="text-blue-400 text-xs animate-pulse">memperbarui...</span>
+                        )}
+                        <span className={`text-xs ${theme.subTextColor}`}>
+                            refresh in <span className="font-mono font-bold">{countdown}s</span>
+                        </span>
+                    </div>
+                    {/* Progress bar countdown */}
+                    <div className={`mt-2 h-0.5 w-48 rounded-full ${isDarkMode ? 'bg-white/10' : 'bg-gray-200'} overflow-hidden`}>
+                        <div
+                            className="h-full bg-emerald-400 transition-all duration-1000 ease-linear rounded-full"
+                            style={{ width: `${(countdown / 30) * 100}%` }}
+                        />
+                    </div>
                 </div>
                 <div className="flex gap-3">
                     <button
@@ -383,13 +423,19 @@ const RekapAbsensi = () => {
                         Refresh
                     </button>
 
+                    {/* Process button: secondary/tersembunyi - biasanya tidak diperlukan */}
                     <button
                         onClick={handleProcess}
                         disabled={processing}
-                        className={`flex items-center gap-2 px-4 py-2 ${isDarkMode ? 'bg-indigo-600 hover:bg-indigo-500' : 'bg-red-600 hover:bg-red-700'} text-white rounded-lg transition-colors text-sm ml-auto`}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 border ${
+                            isDarkMode
+                                ? 'border-white/15 text-gray-500 hover:bg-white/5 hover:text-gray-300'
+                                : 'border-gray-300 text-gray-400 hover:bg-gray-50 hover:text-gray-600'
+                        } rounded-lg transition-colors text-xs ml-auto`}
+                        title="Manual process — biasanya tidak diperlukan karena sistem sudah auto-sync"
                     >
-                        {processing ? <RefreshCcw className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
-                        Process
+                        {processing ? <RefreshCcw className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
+                        {processing ? 'Processing...' : 'Process'}
                     </button>
                 </div>
 
