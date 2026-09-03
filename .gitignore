@@ -29,3 +29,9 @@ dist-ssr
 *.sw?
 
 backend\node_modules
+walkthrough 03092026
+WORKDAY_HARI_LIBUR_DOCUMENTATION.md
+mismatch_log.txt
+debug_output.txt
+.gitignore
+.env

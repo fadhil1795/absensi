@@ -57,7 +57,8 @@ export const rekapService = {
                 COALESCE(kj.shift_id, k.shift_id) AS shift_id, 
                 COALESCE(sj.jam_masuk, s.jam_masuk) AS jam_masuk, 
                 COALESCE(sj.jam_pulang, s.jam_pulang) AS jam_pulang, 
-                COALESCE(sj.toleransi_keterlambatan, s.toleransi_keterlambatan) AS toleransi_keterlambatan
+                COALESCE(sj.toleransi_keterlambatan, s.toleransi_keterlambatan) AS toleransi_keterlambatan,
+                COALESCE(sj.min_jam_kerja, s.min_jam_kerja, 4) AS min_jam_kerja
             FROM karyawan k
             LEFT JOIN shifts s ON k.shift_id = s.id
             LEFT JOIN karyawan_jadwal kj ON kj.karyawan_id = k.id AND kj.tanggal = ?
@@ -125,7 +126,12 @@ export const rekapService = {
                 let newKeluar = record.jam_keluar;
                 let changed = false;
 
+                // Ambil min_jam_kerja dari shift (dalam jam), fallback 4 jam
+                const minKerjaJam = Number(emp.min_jam_kerja) || 4;
+                const minKerjaMs = minKerjaJam * 60 * 60 * 1000;
+
                 // Compare for Earliest (Masuk)
+                // Hanya update masuk jika scan lebih awal dari masuk yang tersimpan
                 if (timeStr < newMasuk) {
                     newMasuk = timeStr;
                     changed = true;
@@ -133,13 +139,20 @@ export const rekapService = {
                 }
 
                 // Compare for Latest (Keluar)
-                // Logic: If scan > newMasuk, it's a potential Out.
-                // We always take the LATEST scan as Out.
+                // Scan hanya dianggap pulang jika jaraknya dari jam masuk >= min_jam_kerja (dari tabel shifts)
                 if (timeStr > newMasuk) {
-                    if (!newKeluar || timeStr > newKeluar) {
-                        newKeluar = timeStr;
-                        changed = true;
-                        console.log(`[Rekap] Found later scan. Updating Keluar to ${newKeluar}`);
+                    const masukMs = new Date(`${dateStr}T${newMasuk}`).getTime();
+                    const scanMs = new Date(`${dateStr}T${timeStr}`).getTime();
+                    const gapMs = scanMs - masukMs;
+
+                    if (gapMs >= minKerjaMs) {
+                        if (!newKeluar || timeStr > newKeluar) {
+                            newKeluar = timeStr;
+                            changed = true;
+                            console.log(`[Rekap] Found valid pulang scan (gap=${Math.floor(gapMs/60000)} menit >= min_jam_kerja=${minKerjaJam}j). Updating Keluar to ${newKeluar}`);
+                        }
+                    } else {
+                        console.log(`[Rekap] Scan ${timeStr} diabaikan sebagai pulang (gap=${Math.floor(gapMs/60000)} menit < min_jam_kerja=${minKerjaJam}j).`);
                     }
                 }
 
@@ -149,7 +162,7 @@ export const rekapService = {
                     let pulangCepat = 0;
                     let durasi = 0;
 
-                    // Terlambat
+                    // Terlambat: catat menit, status tetap 'Hadir'
                     if (emp.jam_masuk && !isWeeklyOff && !isHoliday) {
                         const scanDate = new Date(`${dateStr}T${newMasuk}`);
                         const shiftDate = new Date(`${dateStr}T${emp.jam_masuk}`);
@@ -157,11 +170,12 @@ export const rekapService = {
                         if (diffMins > (emp.toleransi_keterlambatan || 0)) terlambat = diffMins;
                     }
 
-                    // Pulang Cepat & Durasi
+                    // Pulang Cepat: catat menit, status tetap 'Hadir'
                     if (newKeluar) {
                         const masukDate = new Date(`${dateStr}T${newMasuk}`);
                         const keluarDate = new Date(`${dateStr}T${newKeluar}`);
                         durasi = Math.floor((keluarDate.getTime() - masukDate.getTime()) / 60000);
+                        if (durasi < 0) durasi = 0;
 
                         if (emp.jam_pulang && !isWeeklyOff && !isHoliday) {
                             const shiftKeluarDate = new Date(`${dateStr}T${emp.jam_pulang}`);
@@ -170,7 +184,8 @@ export const rekapService = {
                         }
                     }
 
-                    let status = (isWeeklyOff || isHoliday) ? 'Lembur' : 'Hadir';
+                    // Status: selalu 'Hadir' jika karyawan datang (Lembur jika hari libur/weekend)
+                    const status = (isWeeklyOff || isHoliday) ? 'Lembur' : 'Hadir';
 
                     await db.query(`
                         UPDATE rekap_absensi 
@@ -355,8 +370,11 @@ export const rekapService = {
             [end_date, start_date]
         );
 
-        const start = new Date(start_date);
-        const end = new Date(end_date);
+        // Parse tanggal secara timezone-safe (hindari UTC offset bug di Node.js)
+        const [sy, sm, sd] = start_date.split('-').map(Number);
+        const [ey, em, ed] = end_date.split('-').map(Number);
+        const start = new Date(sy, sm - 1, sd);
+        const end = new Date(ey, em - 1, ed);
         let processedCount = 0;
 
         for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
@@ -445,9 +463,14 @@ export const rekapService = {
                 }
 
                 if (actualMasuk) {
+                    // Gunakan min_jam_kerja dari tabel shifts sebagai threshold minimum jarak masuk-pulang
+                    const minKerjaJam = Number(shift.min_jam_kerja) || 4;
+                    const minKerjaMs = minKerjaJam * 60 * 60 * 1000;
+
                     for (let i = logs.length - 1; i >= 0; i--) {
                         const t = new Date(logs[i].scan_time);
-                        if (t.getTime() > actualMasuk.getTime() + (5 * 60 * 1000)) {
+                        const gapMs = t.getTime() - actualMasuk.getTime();
+                        if (gapMs >= minKerjaMs) {
                             actualPulang = t;
                             break;
                         }
@@ -488,22 +511,22 @@ export const rekapService = {
 
                 if (actualMasuk && actualPulang) {
                     durasi = Math.floor((actualPulang.getTime() - actualMasuk.getTime()) / (1000 * 60));
+                    if (durasi < 0) durasi = 0; // guard durasi negatif
                 }
 
                 if (actualMasuk && !isWeeklyOff && !isHoliday) {
                     const diffMs = actualMasuk.getTime() - shiftMasukTime.getTime();
                     const diffMins = Math.floor(diffMs / (1000 * 60));
+                    // Catat menit terlambat, tapi status tetap 'Hadir'
                     if (diffMins > shift.toleransi_keterlambatan) {
                         terlambat = diffMins;
-                        if (targetInstansiId !== 5) {
-                            status = 'Terlambat';
-                        }
                     }
                 }
 
                 if (actualPulang && !isWeeklyOff && !isHoliday) {
                     const diffMs = shiftPulangTime.getTime() - actualPulang.getTime();
                     const diffMins = Math.floor(diffMs / (1000 * 60));
+                    // Catat menit pulang cepat, tapi status tetap 'Hadir'
                     if (diffMins > 0) {
                         pulangCepat = diffMins;
                     }
