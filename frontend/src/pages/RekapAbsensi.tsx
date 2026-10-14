@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { Download, RefreshCcw, Play, CheckCircle, AlertTriangle, Edit, Trash2 } from 'lucide-react';
+import { Download, RefreshCcw, Play, CheckCircle, AlertTriangle, Edit, Trash2, FileText } from 'lucide-react';
 import { format } from 'date-fns';
 import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { useTheme } from '../context/ThemeContext';
 import { API_BASE_URL } from '../config';
 import { usePermissions } from '../hooks/usePermissions';
@@ -42,6 +44,14 @@ interface RekapStatsItem {
     total_durasi_menit: number;
 }
 
+interface InstansiInfo {
+    id: number;
+    nama: string;
+    alamat?: string;
+    telepon?: string;
+    email?: string;
+}
+
 const RekapAbsensi = () => {
     const { theme, isDarkMode } = useTheme();
     const { hasOperation } = usePermissions();
@@ -59,6 +69,7 @@ const RekapAbsensi = () => {
     const [selectedKaryawanID, setSelectedKaryawanID] = useState<string>('');
     const [shifts, setShifts] = useState<{ id: number; nama: string }[]>([]); // New Shift State
     const [selectedShift, setSelectedShift] = useState<string>(''); // New Shift State
+    const [instansiInfo, setInstansiInfo] = useState<InstansiInfo | null>(null);
 
     // Edit Modal State
     const [loading, setLoading] = useState(false);
@@ -136,6 +147,180 @@ const RekapAbsensi = () => {
         }
     };
 
+    const renderKopInstansi = (doc: any, isLandscape: boolean) => {
+        const pageWidth = isLandscape ? 297 : 210;
+        const centerX = pageWidth / 2;
+        const rightX = pageWidth - 14;
+
+        const user = JSON.parse(localStorage.getItem('user') || '{}');
+        const instName = (instansiInfo?.nama || user?.instansi?.nama || 'PERPENAS').toUpperCase();
+        const instAlamat = instansiInfo?.alamat || '';
+        const kontakParts: string[] = [];
+        if (instansiInfo?.telepon && instansiInfo.telepon !== '-') kontakParts.push(`Telp: ${instansiInfo.telepon}`);
+        if (instansiInfo?.email && instansiInfo.email !== '-') kontakParts.push(`Email: ${instansiInfo.email}`);
+        const instKontak = kontakParts.join('   |   ');
+
+        // 1. Nama Instansi (Header Utama)
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(14);
+        doc.setTextColor(17, 24, 39);
+        doc.text(instName, centerX, 15, { align: 'center' });
+
+        let currentY = 20;
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8.5);
+        doc.setTextColor(100, 116, 139);
+
+        if (instAlamat) {
+            doc.text(instAlamat, centerX, currentY, { align: 'center' });
+            currentY += 4.5;
+        }
+        if (instKontak) {
+            doc.text(instKontak, centerX, currentY, { align: 'center' });
+            currentY += 4.5;
+        }
+
+        // 2. Garis Pembatas Kop Ganda
+        currentY += 1.5;
+        doc.setDrawColor(203, 213, 225);
+        doc.setLineWidth(0.8);
+        doc.line(14, currentY, rightX, currentY);
+
+        doc.setLineWidth(0.3);
+        doc.line(14, currentY + 1.2, rightX, currentY + 1.2);
+
+        return currentY + 7;
+    };
+
+    const handleExportPDF = () => {
+        const doc = new jsPDF({ orientation: activeTab === 'summary' ? 'landscape' : 'portrait' }) as any;
+        const generatedDate = format(new Date(), 'dd/MM/yyyy HH:mm');
+        const periodStr = `${formatDateDisplay(startDate)} s/d ${formatDateDisplay(endDate)}`;
+
+        if (activeTab === 'personal') {
+            const emp = karyawanList.find(k => String(k.id) === String(selectedKaryawanID));
+            const empName = emp ? `${emp.nama} (${emp.nik})` : (data[0]?.karyawan_nama || 'Karyawan');
+
+            const titleY = renderKopInstansi(doc, false);
+
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(12);
+            doc.setTextColor(30, 41, 59);
+            doc.text("LAPORAN REKAP ABSENSI PERSONAL", 105, titleY, { align: 'center' });
+
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(9);
+            doc.setTextColor(100, 116, 139);
+            doc.text(`Karyawan: ${empName}   |   Periode: ${periodStr}   |   Dicetak: ${generatedDate}`, 105, titleY + 5, { align: 'center' });
+
+            let startY = titleY + 11;
+            if (summaryData.length > 0) {
+                const s = summaryData[0];
+                const statsText = `Hadir: ${s.total_hadir}   |   Lembur: ${s.total_lembur}   |   Telat: ${s.total_terlambat} (${s.total_terlambat_menit || 0} mnt)   |   Alpa: ${s.total_alpa}   |   Izin/Cuti: ${s.total_izin || 0}`;
+                doc.setFontSize(8.5);
+                doc.setTextColor(51, 65, 85);
+                doc.setFillColor(241, 245, 249);
+                doc.roundedRect(14, startY, 182, 8, 2, 2, 'F');
+                doc.text(statsText, 105, startY + 5.5, { align: 'center' });
+                startY += 12;
+            }
+
+            const tableColumn = ["Tanggal", "Shift", "Jam Masuk", "Jam Pulang", "Status", "Telat (Min)", "Pulang Cpt (Min)"];
+            const tableRows = data.map(item => [
+                formatDateDisplay(item.tanggal),
+                item.shift_nama || '-',
+                item.jam_masuk || '-',
+                item.jam_pulang || '-',
+                item.status_kehadiran,
+                item.terlambat_menit > 0 ? String(item.terlambat_menit) : '-',
+                item.pulang_cepat_menit > 0 ? String(item.pulang_cepat_menit) : '-'
+            ]);
+
+            autoTable(doc, {
+                head: [tableColumn],
+                body: tableRows,
+                startY,
+                styles: { fontSize: 8, cellPadding: 2.5 },
+                headStyles: { fillColor: [225, 29, 72], textColor: 255, fontStyle: 'bold' },
+                alternateRowStyles: { fillColor: [248, 250, 252] },
+            });
+
+            doc.save(`Rekap_Personal_${emp?.nik || 'karyawan'}_${startDate}.pdf`);
+        } else if (activeTab === 'summary') {
+            const titleY = renderKopInstansi(doc, true);
+
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(12);
+            doc.setTextColor(30, 41, 59);
+            doc.text("LAPORAN RINGKASAN ABSENSI SHIFT (SUMMARY)", 148.5, titleY, { align: 'center' });
+
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(9);
+            doc.setTextColor(100, 116, 139);
+            doc.text(`Periode: ${periodStr}   |   Dicetak: ${generatedDate}`, 148.5, titleY + 5, { align: 'center' });
+
+            const tableColumn = ["Nama", "NIK", "Departemen", "Hadir", "Lembur", "Telat", "Alpa", "Izin/Cuti", "Telat (Min)", "Total Jam Kerja"];
+            const tableRows = summaryData.map(item => [
+                item.karyawan_nama,
+                item.karyawan_nik,
+                item.departemen_nama || '-',
+                String(item.total_hadir),
+                String(item.total_lembur),
+                String(item.total_terlambat),
+                String(item.total_alpa),
+                String(item.total_izin || 0),
+                String(item.total_terlambat_menit || 0),
+                (item.total_durasi_menit / 60).toFixed(1) + ' jam'
+            ]);
+
+            autoTable(doc, {
+                head: [tableColumn],
+                body: tableRows,
+                startY: titleY + 11,
+                styles: { fontSize: 8, cellPadding: 2.5 },
+                headStyles: { fillColor: [225, 29, 72], textColor: 255, fontStyle: 'bold' },
+                alternateRowStyles: { fillColor: [248, 250, 252] },
+            });
+
+            doc.save(`Rekap_Summary_${startDate}_sd_${endDate}.pdf`);
+        } else {
+            const titleY = renderKopInstansi(doc, false);
+
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(12);
+            doc.setTextColor(30, 41, 59);
+            doc.text("LAPORAN DETAIL REKAP ABSENSI SHIFT", 105, titleY, { align: 'center' });
+
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(9);
+            doc.setTextColor(100, 116, 139);
+            doc.text(`Periode: ${periodStr}   |   Dicetak: ${generatedDate}`, 105, titleY + 5, { align: 'center' });
+
+            const tableColumn = ["Nama", "NIK", "Shift", "Tanggal", "Jam Masuk", "Jam Pulang", "Status", "Telat (Min)"];
+            const tableRows = data.map(item => [
+                item.karyawan_nama,
+                item.karyawan_nik,
+                item.shift_nama || '-',
+                formatDateDisplay(item.tanggal),
+                item.jam_masuk || '-',
+                item.jam_pulang || '-',
+                item.status_kehadiran,
+                item.terlambat_menit > 0 ? String(item.terlambat_menit) : '-'
+            ]);
+
+            autoTable(doc, {
+                head: [tableColumn],
+                body: tableRows,
+                startY: titleY + 11,
+                styles: { fontSize: 8, cellPadding: 2.5 },
+                headStyles: { fillColor: [225, 29, 72], textColor: 255, fontStyle: 'bold' },
+                alternateRowStyles: { fillColor: [248, 250, 252] },
+            });
+
+            doc.save(`Rekap_Detail_${startDate}_sd_${endDate}.pdf`);
+        }
+    };
+
     // Handle Delete
     const handleDelete = async (id: number) => {
         if (!confirm('Are you sure you want to delete this record?')) return;
@@ -207,9 +392,25 @@ const RekapAbsensi = () => {
             }
         }
 
+        const fetchInstansi = async () => {
+            try {
+                const res = await axios.get(`${API_BASE_URL}/api/instansi`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                const user = JSON.parse(localStorage.getItem('user') || '{}');
+                if (Array.isArray(res.data) && res.data.length > 0) {
+                    const myInst = res.data.find((i: any) => i.id === user?.instansi?.id) || res.data[0];
+                    setInstansiInfo(myInst);
+                }
+            } catch (e) {
+                console.error("Failed to fetch instansi", e);
+            }
+        };
+
         fetchKaryawan();
         fetchShifts();
-    }, []);
+        fetchInstansi();
+    }, [token]);
 
     // Fetch Data (showLoading=false untuk auto-refresh diam-diam)
     const fetchData = async (showLoading = true) => {
@@ -328,14 +529,24 @@ const RekapAbsensi = () => {
                         />
                     </div>
                 </div>
-                <div className="flex gap-3">
+                <div className="flex gap-2">
                     {canExport && (
-                        <button
-                            onClick={handleExportExcel}
-                            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors text-sm"
-                        >
-                            <Download className="w-4 h-4" /> Export Excel
-                        </button>
+                        <>
+                            <button
+                                onClick={handleExportExcel}
+                                className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors text-sm font-medium shadow-sm"
+                                title="Export data ke format Microsoft Excel (.xlsx)"
+                            >
+                                <Download className="w-4 h-4" /> Export Excel
+                            </button>
+                            <button
+                                onClick={handleExportPDF}
+                                className="flex items-center gap-1.5 px-3.5 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-lg transition-colors text-sm font-medium shadow-sm"
+                                title="Export data ke format PDF (.pdf)"
+                            >
+                                <FileText className="w-4 h-4" /> Export PDF
+                            </button>
+                        </>
                     )}
                 </div>
             </div>

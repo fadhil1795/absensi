@@ -4,7 +4,7 @@ import axios from 'axios';
 import { Download, Search, Filter, X, RefreshCcw } from 'lucide-react';
 import { format, isValid } from 'date-fns';
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import { useTheme } from '../context/ThemeContext';
 import { API_BASE_URL } from '../config';
@@ -146,7 +146,7 @@ const LaporanAbsensi = () => {
             getCatatan(item)
         ]);
 
-        doc.autoTable({
+        autoTable(doc, {
             head: [tableColumn],
             body: tableRows,
             startY: 40,
