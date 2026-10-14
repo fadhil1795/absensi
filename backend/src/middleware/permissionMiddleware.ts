@@ -5,6 +5,7 @@ import { RowDataPacket } from 'mysql2';
 /**
  * Middleware to check if the authenticated user has a specific permission.
  * SUPER_ADMIN always bypasses permission checks.
+ * Supports granular permission keys: e.g. "rekap.view", "rekap.edit"
  */
 export const checkPermission = (permissionKey: string) => {
     return async (req: Request, res: Response, next: NextFunction) => {
@@ -56,24 +57,92 @@ export const getPermissionsForRole = async (roleId: number): Promise<string[]> =
 };
 
 /**
- * Full list of all available permissions
+ * Full list of all available permissions — granular per-operation format.
+ * Key format: "{menu}.{operation}"
+ * Operations: view | add | edit | delete | export | process | approve
  */
 export const ALL_PERMISSIONS = [
-    { key: 'dashboard', label: 'Dashboard Overview', group: 'General' },
-    { key: 'employees', label: 'Employees Management', group: 'User Management' },
-    { key: 'mobile_users', label: 'Mobile Users', group: 'User Management' },
-    { key: 'shifts', label: 'Sesi / Mata Pelajaran', group: 'User Management' },
-    { key: 'admins', label: 'Admin Management', group: 'User Management' },
-    { key: 'roles', label: 'Role Management', group: 'User Management' },
-    { key: 'departments', label: 'Departments', group: 'Organization' },
-    { key: 'instansi', label: 'Instansi', group: 'Organization' },
-    { key: 'machines', label: 'Mesin Absensi', group: 'Organization' },
-    { key: 'schedule', label: 'Schedule Management', group: 'Organization' },
-    { key: 'realtime', label: 'Live Monitoring', group: 'Attendance' },
-    { key: 'rekap', label: 'Rekap Shift', group: 'Attendance' },
-    { key: 'audit_logs', label: 'Audit Logs', group: 'Attendance' },
-    { key: 'leaves', label: 'Leave Requests', group: 'Leave Management' },
-    { key: 'holidays', label: 'Holidays', group: 'Leave Management' },
-    { key: 'information', label: 'Information / Announcements', group: 'Communication' },
-    { key: 'reports', label: 'Laporan Absensi', group: 'Reports' },
+    // General
+    { key: 'dashboard.view', label: 'Lihat Dashboard', group: 'General', menu: 'dashboard' },
+
+    // User Management
+    { key: 'employees.view',   label: 'Lihat Karyawan',       group: 'User Management', menu: 'employees' },
+    { key: 'employees.add',    label: 'Tambah Karyawan',      group: 'User Management', menu: 'employees' },
+    { key: 'employees.edit',   label: 'Edit Karyawan',        group: 'User Management', menu: 'employees' },
+    { key: 'employees.delete', label: 'Hapus Karyawan',       group: 'User Management', menu: 'employees' },
+    { key: 'employees.export', label: 'Export Data Karyawan', group: 'User Management', menu: 'employees' },
+
+    { key: 'mobile_users.view',   label: 'Lihat Mobile Users',  group: 'User Management', menu: 'mobile_users' },
+    { key: 'mobile_users.add',    label: 'Tambah Mobile User',  group: 'User Management', menu: 'mobile_users' },
+    { key: 'mobile_users.edit',   label: 'Edit Mobile User',    group: 'User Management', menu: 'mobile_users' },
+    { key: 'mobile_users.delete', label: 'Hapus Mobile User',   group: 'User Management', menu: 'mobile_users' },
+
+    { key: 'shifts.view',   label: 'Lihat Shift',  group: 'User Management', menu: 'shifts' },
+    { key: 'shifts.add',    label: 'Tambah Shift', group: 'User Management', menu: 'shifts' },
+    { key: 'shifts.edit',   label: 'Edit Shift',   group: 'User Management', menu: 'shifts' },
+    { key: 'shifts.delete', label: 'Hapus Shift',  group: 'User Management', menu: 'shifts' },
+
+    { key: 'admins.view',   label: 'Lihat Admin',  group: 'User Management', menu: 'admins' },
+    { key: 'admins.add',    label: 'Tambah Admin', group: 'User Management', menu: 'admins' },
+    { key: 'admins.edit',   label: 'Edit Admin',   group: 'User Management', menu: 'admins' },
+    { key: 'admins.delete', label: 'Hapus Admin',  group: 'User Management', menu: 'admins' },
+
+    { key: 'roles.view',   label: 'Lihat Role',  group: 'User Management', menu: 'roles' },
+    { key: 'roles.add',    label: 'Tambah Role', group: 'User Management', menu: 'roles' },
+    { key: 'roles.edit',   label: 'Edit Role',   group: 'User Management', menu: 'roles' },
+    { key: 'roles.delete', label: 'Hapus Role',  group: 'User Management', menu: 'roles' },
+
+    // Organisasi
+    { key: 'departments.view',   label: 'Lihat Departemen',  group: 'Organisasi', menu: 'departments' },
+    { key: 'departments.add',    label: 'Tambah Departemen', group: 'Organisasi', menu: 'departments' },
+    { key: 'departments.edit',   label: 'Edit Departemen',   group: 'Organisasi', menu: 'departments' },
+    { key: 'departments.delete', label: 'Hapus Departemen',  group: 'Organisasi', menu: 'departments' },
+
+    { key: 'instansi.view',   label: 'Lihat Instansi',  group: 'Organisasi', menu: 'instansi' },
+    { key: 'instansi.add',    label: 'Tambah Instansi', group: 'Organisasi', menu: 'instansi' },
+    { key: 'instansi.edit',   label: 'Edit Instansi',   group: 'Organisasi', menu: 'instansi' },
+    { key: 'instansi.delete', label: 'Hapus Instansi',  group: 'Organisasi', menu: 'instansi' },
+
+    { key: 'machines.view',   label: 'Lihat Mesin',  group: 'Organisasi', menu: 'machines' },
+    { key: 'machines.add',    label: 'Tambah Mesin', group: 'Organisasi', menu: 'machines' },
+    { key: 'machines.edit',   label: 'Edit Mesin',   group: 'Organisasi', menu: 'machines' },
+    { key: 'machines.delete', label: 'Hapus Mesin',  group: 'Organisasi', menu: 'machines' },
+
+    { key: 'schedule.view',   label: 'Lihat Jadwal',  group: 'Organisasi', menu: 'schedule' },
+    { key: 'schedule.add',    label: 'Tambah Jadwal', group: 'Organisasi', menu: 'schedule' },
+    { key: 'schedule.edit',   label: 'Edit Jadwal',   group: 'Organisasi', menu: 'schedule' },
+    { key: 'schedule.delete', label: 'Hapus Jadwal',  group: 'Organisasi', menu: 'schedule' },
+
+    // Absensi
+    { key: 'realtime.view', label: 'Lihat Live Monitoring', group: 'Absensi', menu: 'realtime' },
+
+    { key: 'rekap.view',    label: 'Lihat Rekap',         group: 'Absensi', menu: 'rekap' },
+    { key: 'rekap.edit',    label: 'Edit Record Rekap',   group: 'Absensi', menu: 'rekap' },
+    { key: 'rekap.delete',  label: 'Hapus Record Rekap',  group: 'Absensi', menu: 'rekap' },
+    { key: 'rekap.export',  label: 'Export Rekap Excel',  group: 'Absensi', menu: 'rekap' },
+    { key: 'rekap.process', label: 'Proses Manual Rekap', group: 'Absensi', menu: 'rekap' },
+
+    { key: 'audit_logs.view', label: 'Lihat Audit Log', group: 'Absensi', menu: 'audit_logs' },
+
+    // Leave Management
+    { key: 'leaves.view',    label: 'Lihat Izin/Cuti',    group: 'Leave Management', menu: 'leaves' },
+    { key: 'leaves.add',     label: 'Tambah Izin/Cuti',   group: 'Leave Management', menu: 'leaves' },
+    { key: 'leaves.edit',    label: 'Edit Izin/Cuti',     group: 'Leave Management', menu: 'leaves' },
+    { key: 'leaves.delete',  label: 'Hapus Izin/Cuti',    group: 'Leave Management', menu: 'leaves' },
+    { key: 'leaves.approve', label: 'Approve/Tolak Izin', group: 'Leave Management', menu: 'leaves' },
+
+    { key: 'holidays.view',   label: 'Lihat Hari Libur',  group: 'Leave Management', menu: 'holidays' },
+    { key: 'holidays.add',    label: 'Tambah Hari Libur', group: 'Leave Management', menu: 'holidays' },
+    { key: 'holidays.edit',   label: 'Edit Hari Libur',   group: 'Leave Management', menu: 'holidays' },
+    { key: 'holidays.delete', label: 'Hapus Hari Libur',  group: 'Leave Management', menu: 'holidays' },
+
+    // Komunikasi
+    { key: 'information.view',   label: 'Lihat Informasi',  group: 'Komunikasi', menu: 'information' },
+    { key: 'information.add',    label: 'Tambah Informasi', group: 'Komunikasi', menu: 'information' },
+    { key: 'information.edit',   label: 'Edit Informasi',   group: 'Komunikasi', menu: 'information' },
+    { key: 'information.delete', label: 'Hapus Informasi',  group: 'Komunikasi', menu: 'information' },
+
+    // Laporan
+    { key: 'reports.view',   label: 'Lihat Laporan',  group: 'Laporan', menu: 'reports' },
+    { key: 'reports.export', label: 'Export Laporan', group: 'Laporan', menu: 'reports' },
 ];

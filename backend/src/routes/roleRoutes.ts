@@ -78,7 +78,7 @@ router.get('/:id', authenticate, async (req: any, res) => {
 });
 
 // CREATE role
-router.post('/', authenticate, checkPermission('roles'), async (req: any, res) => {
+router.post('/', authenticate, checkPermission('roles.add'), async (req: any, res) => {
     const { name, description, permissions, instansi_id } = req.body;
 
     if (!name) return res.status(400).json({ error: 'Role name is required' });
@@ -125,7 +125,7 @@ router.post('/', authenticate, checkPermission('roles'), async (req: any, res) =
 });
 
 // UPDATE role
-router.put('/:id', authenticate, checkPermission('roles'), async (req: any, res) => {
+router.put('/:id', authenticate, checkPermission('roles.edit'), async (req: any, res) => {
     const { id } = req.params;
     const { name, description, permissions } = req.body;
 
@@ -188,7 +188,7 @@ router.put('/:id', authenticate, checkPermission('roles'), async (req: any, res)
 });
 
 // DELETE role
-router.delete('/:id', authenticate, checkPermission('roles'), async (req: any, res) => {
+router.delete('/:id', authenticate, checkPermission('roles.delete'), async (req: any, res) => {
     const { id } = req.params;
 
     try {

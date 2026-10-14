@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import db from '../db';
 import { authenticate } from '../middleware/authMiddleware';
+import { checkPermission } from '../middleware/permissionMiddleware';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import { logAction } from '../utils/logger';
 import { rekapService } from '../services/rekapService';
@@ -106,8 +107,8 @@ router.post('/trigger', async (req: any, res) => {
     }
 });
 
-// 2. TRIGGER PROCESS (POST /process)
-router.post('/process', authenticate, async (req: any, res) => {
+// 2. TRIGGER PROCESS (POST /process) — membutuhkan rekap.process
+router.post('/process', authenticate, checkPermission('rekap.process'), async (req: any, res) => {
     const { start_date, end_date, instansi_id } = req.body;
 
     if (!start_date || !end_date) {
@@ -129,8 +130,8 @@ router.post('/process', authenticate, async (req: any, res) => {
     }
 });
 
-// 2. GET REKAP (GET /)
-router.get('/', authenticate, async (req: any, res) => {
+// 2. GET REKAP (GET /) — membutuhkan rekap.view
+router.get('/', authenticate, checkPermission('rekap.view'), async (req: any, res) => {
     const { start_date, end_date, instansi_id } = req.query;
 
     // === AUTO-SYNC BACKGROUND (non-blocking, throttled 5 menit) ===
@@ -211,8 +212,8 @@ router.get('/', authenticate, async (req: any, res) => {
     }
 });
 
-// 3. GET STATS (GET /stats) - For Weekly/Monthly Recap
-router.get('/stats', authenticate, async (req: any, res) => {
+// 3. GET STATS (GET /stats) — membutuhkan rekap.view
+router.get('/stats', authenticate, checkPermission('rekap.view'), async (req: any, res) => {
     const { start_date, end_date, instansi_id } = req.query;
 
     if (!start_date || !end_date) {
@@ -268,8 +269,8 @@ router.get('/stats', authenticate, async (req: any, res) => {
     }
 });
 
-// 4. GET REKAP DETAIL (GET /:id)
-router.get('/:id', authenticate, async (req: any, res) => {
+// 4. GET REKAP DETAIL (GET /:id) — membutuhkan rekap.view
+router.get('/:id', authenticate, checkPermission('rekap.view'), async (req: any, res) => {
     const { id } = req.params;
 
     try {
@@ -295,8 +296,8 @@ router.get('/:id', authenticate, async (req: any, res) => {
     }
 });
 
-// 5. DELETE REKAP (DELETE /:id)
-router.delete('/:id', authenticate, async (req: any, res) => {
+// 5. DELETE REKAP (DELETE /:id) — membutuhkan rekap.delete
+router.delete('/:id', authenticate, checkPermission('rekap.delete'), async (req: any, res) => {
     const { id } = req.params;
 
     try {
@@ -312,8 +313,8 @@ router.delete('/:id', authenticate, async (req: any, res) => {
     }
 });
 
-// 5. UPDATE REKAP (PUT /:id)
-router.put('/:id', authenticate, async (req: any, res) => {
+// 5. UPDATE REKAP (PUT /:id) — membutuhkan rekap.edit
+router.put('/:id', authenticate, checkPermission('rekap.edit'), async (req: any, res) => {
     const { id } = req.params;
     const { jam_masuk, jam_pulang, status_kehadiran } = req.body;
 

@@ -4,6 +4,7 @@ import axios from 'axios';
 import { ArrowLeft, Save } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { API_BASE_URL } from '../config';
+import { usePermissions } from '../hooks/usePermissions';
 
 interface RekapAbsensiItem {
     id: number;
@@ -19,6 +20,8 @@ interface RekapAbsensiItem {
 
 const RekapAbsensiForm = () => {
     const { theme, isDarkMode } = useTheme();
+    const { hasOperation, loading: permsLoading } = usePermissions();
+    const canEdit = hasOperation('rekap', 'edit');
     const navigate = useNavigate();
     const { id } = useParams<{ id: string }>();
     const [record, setRecord] = useState<RekapAbsensiItem | null>(null);
@@ -100,7 +103,21 @@ const RekapAbsensiForm = () => {
             </div>
 
             <div className={`${theme.cardBg} border ${theme.cardBorder} rounded-2xl p-6 shadow-sm transition-colors duration-300`}>
-                {loading ? (
+                {!permsLoading && !canEdit ? (
+                    <div className="text-center py-14 space-y-3">
+                        <div className="text-amber-500 font-semibold text-lg">Akses Ditolak</div>
+                        <p className={`text-sm ${theme.subTextColor}`}>
+                            Role Anda tidak memiliki izin untuk mengedit absensi (<code>rekap.edit</code>).
+                        </p>
+                        <button
+                            type="button"
+                            onClick={() => navigate('/dashboard/rekap')}
+                            className="mt-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm"
+                        >
+                            Kembali ke Rekap
+                        </button>
+                    </div>
+                ) : loading ? (
                     <div className="text-center py-14 text-gray-500">Loading attendance record...</div>
                 ) : error ? (
                     <div className="text-center py-14 text-red-500">{error}</div>

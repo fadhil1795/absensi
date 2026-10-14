@@ -41,61 +41,65 @@ const Sidebar = ({ isOpen, onClose, role }: SidebarProps) => {
     const hasPermission = (permKey: string) => {
         if (isSuperAdmin) return true;
         if (hasNoPermissionsData) return true;
-        return userPermissions.includes(permKey);
+        // Support both new dotted format (rekap.view) and legacy flat format (rekap)
+        if (userPermissions.includes(permKey)) return true;
+        // If permKey is a menu name (legacy), check for menu.view
+        if (userPermissions.includes(`${permKey}.view`)) return true;
+        return false;
     };
 
     const menuGroups = [
         {
             title: 'General',
             items: [
-                { title: 'Overview', path: '/dashboard', icon: LayoutDashboard, permKey: 'dashboard' }
+                { title: 'Overview', path: '/dashboard', icon: LayoutDashboard, permKey: 'dashboard.view' }
             ]
         },
         {
             title: 'User Management',
             items: [
-                { title: 'Employees', path: '/dashboard/karyawan', icon: Users, permKey: 'employees' },
-                { title: 'Mobile Users', path: '/dashboard/mobile-users', icon: Phone, permKey: 'mobile_users' },
-                { title: 'Sesi / Mata Pelajaran', path: '/dashboard/shifts', icon: Settings, permKey: 'shifts' },
-                { title: 'Manage Admins', path: '/dashboard/admins', icon: Shield, permKey: 'admins' },
-                { title: 'Role Management', path: '/dashboard/roles', icon: ShieldAlert, permKey: 'roles' },
+                { title: 'Employees', path: '/dashboard/karyawan', icon: Users, permKey: 'employees.view' },
+                { title: 'Mobile Users', path: '/dashboard/mobile-users', icon: Phone, permKey: 'mobile_users.view' },
+                { title: 'Sesi / Mata Pelajaran', path: '/dashboard/shifts', icon: Settings, permKey: 'shifts.view' },
+                { title: 'Manage Admins', path: '/dashboard/admins', icon: Shield, permKey: 'admins.view' },
+                { title: 'Role Management', path: '/dashboard/roles', icon: ShieldAlert, permKey: 'roles.view' },
             ]
         },
         {
             title: 'Organization',
             items: [
-                { title: 'Departemens', path: '/dashboard/departemen', icon: Briefcase, permKey: 'departments' },
-                { title: 'Instansi', path: '/dashboard/instansi', icon: Building2, permKey: 'instansi' },
-                { title: 'Mesin Absensi', path: '/dashboard/mesin', icon: Cpu, permKey: 'machines' },
-                { title: 'Manajemen Jadwal', path: '/dashboard/schedule', icon: Calendar, permKey: 'schedule' },
+                { title: 'Departemens', path: '/dashboard/departemen', icon: Briefcase, permKey: 'departments.view' },
+                { title: 'Instansi', path: '/dashboard/instansi', icon: Building2, permKey: 'instansi.view' },
+                { title: 'Mesin Absensi', path: '/dashboard/mesin', icon: Cpu, permKey: 'machines.view' },
+                { title: 'Manajemen Jadwal', path: '/dashboard/schedule', icon: Calendar, permKey: 'schedule.view' },
             ]
         },
         {
             title: 'Attendance',
             items: [
-                { title: 'Live Monitoring', path: '/dashboard/realtime', icon: Activity, permKey: 'realtime' },
-                { title: 'Rekap Shift', path: '/dashboard/rekap', icon: ClipboardList, permKey: 'rekap' },
-                { title: 'Audit Logs', path: '/dashboard/audit-logs', icon: ShieldAlert, permKey: 'audit_logs' },
+                { title: 'Live Monitoring', path: '/dashboard/realtime', icon: Activity, permKey: 'realtime.view' },
+                { title: 'Rekap Shift', path: '/dashboard/rekap', icon: ClipboardList, permKey: 'rekap.view' },
+                { title: 'Audit Logs', path: '/dashboard/audit-logs', icon: ShieldAlert, permKey: 'audit_logs.view' },
             ]
         },
         {
             title: 'Leave Management',
             items: [
-                { title: 'Leave Requests', path: '/dashboard/izin', icon: FileText, permKey: 'leaves' },
-                { title: 'Holidays', path: '/dashboard/holidays', icon: Calendar, permKey: 'holidays' },
-                { title: 'Hari Kerja', path: '/dashboard/work-days', icon: CalendarCheck, permKey: 'holidays' },
+                { title: 'Leave Requests', path: '/dashboard/izin', icon: FileText, permKey: 'leaves.view' },
+                { title: 'Holidays', path: '/dashboard/holidays', icon: Calendar, permKey: 'holidays.view' },
+                { title: 'Hari Kerja', path: '/dashboard/work-days', icon: CalendarCheck, permKey: 'holidays.view' },
             ]
         },
         {
             title: 'Communication',
             items: [
-                { title: 'Information', path: '/dashboard/information', icon: Megaphone, permKey: 'information' },
+                { title: 'Information', path: '/dashboard/information', icon: Megaphone, permKey: 'information.view' },
             ]
         },
         {
             title: 'Reports',
             items: [
-                { title: 'Laporan Absensi', path: '/dashboard/laporan', icon: ClipboardList, permKey: 'reports' },
+                { title: 'Laporan Absensi', path: '/dashboard/laporan', icon: ClipboardList, permKey: 'reports.view' },
             ]
         }
     ];

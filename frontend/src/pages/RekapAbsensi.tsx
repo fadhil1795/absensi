@@ -6,6 +6,7 @@ import { format } from 'date-fns';
 import * as XLSX from 'xlsx';
 import { useTheme } from '../context/ThemeContext';
 import { API_BASE_URL } from '../config';
+import { usePermissions } from '../hooks/usePermissions';
 
 interface RekapAbsensiItem {
     id: number;
@@ -43,6 +44,14 @@ interface RekapStatsItem {
 
 const RekapAbsensi = () => {
     const { theme, isDarkMode } = useTheme();
+    const { hasOperation } = usePermissions();
+
+    // Permission guards untuk Rekap Shift
+    const canExport  = hasOperation('rekap', 'export');
+    const canEdit    = hasOperation('rekap', 'edit');
+    const canDelete  = hasOperation('rekap', 'delete');
+    const canProcess = hasOperation('rekap', 'process');
+    const showActions = canEdit || canDelete;
     const [data, setData] = useState<RekapAbsensiItem[]>([]);
     const [summaryData, setSummaryData] = useState<RekapStatsItem[]>([]);
     const [activeTab, setActiveTab] = useState<'detail' | 'summary' | 'personal'>('detail');
@@ -320,12 +329,14 @@ const RekapAbsensi = () => {
                     </div>
                 </div>
                 <div className="flex gap-3">
-                    <button
-                        onClick={handleExportExcel}
-                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors text-sm"
-                    >
-                        <Download className="w-4 h-4" /> Export Excel
-                    </button>
+                    {canExport && (
+                        <button
+                            onClick={handleExportExcel}
+                            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors text-sm"
+                        >
+                            <Download className="w-4 h-4" /> Export Excel
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -423,20 +434,22 @@ const RekapAbsensi = () => {
                         Refresh
                     </button>
 
-                    {/* Process button: secondary/tersembunyi - biasanya tidak diperlukan */}
-                    <button
-                        onClick={handleProcess}
-                        disabled={processing}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 border ${
-                            isDarkMode
-                                ? 'border-white/15 text-gray-500 hover:bg-white/5 hover:text-gray-300'
-                                : 'border-gray-300 text-gray-400 hover:bg-gray-50 hover:text-gray-600'
-                        } rounded-lg transition-colors text-xs ml-auto`}
-                        title="Manual process — biasanya tidak diperlukan karena sistem sudah auto-sync"
-                    >
-                        {processing ? <RefreshCcw className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
-                        {processing ? 'Processing...' : 'Process'}
-                    </button>
+                    {/* Process button: hanya tampil jika punya rekap.process */}
+                    {canProcess && (
+                        <button
+                            onClick={handleProcess}
+                            disabled={processing}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 border ${
+                                isDarkMode
+                                    ? 'border-white/15 text-gray-500 hover:bg-white/5 hover:text-gray-300'
+                                    : 'border-gray-300 text-gray-400 hover:bg-gray-50 hover:text-gray-600'
+                            } rounded-lg transition-colors text-xs ml-auto`}
+                            title="Manual process — biasanya tidak diperlukan karena sistem sudah auto-sync"
+                        >
+                            {processing ? <RefreshCcw className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
+                            {processing ? 'Processing...' : 'Process'}
+                        </button>
+                    )}
                 </div>
 
                 <div className="mt-3 text-xs text-gray-500">
@@ -544,7 +557,7 @@ const RekapAbsensi = () => {
                                     <th className="px-6 py-4">Jam Pulang</th>
                                     <th className="px-6 py-4">Status</th>
                                     <th className="px-6 py-4 text-center">Telat (Min)</th>
-                                    <th className="px-6 py-4 text-center">Actions</th>
+                                    {showActions && <th className="px-6 py-4 text-center">Actions</th>}
                                 </tr>
                             </thead>
                             <tbody className={`divide-y ${isDarkMode ? 'divide-white/5' : 'divide-gray-200'} text-sm`}>
@@ -578,24 +591,30 @@ const RekapAbsensi = () => {
                                             <td className={`px-6 py-4 text-center ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
                                                 {item.terlambat_menit > 0 ? <span className="text-red-400 font-bold">{item.terlambat_menit}</span> : '-'}
                                             </td>
-                                            <td className="px-6 py-4 text-center">
-                                                <div className="flex items-center justify-center gap-2">
-                                                    <button
-                                                        onClick={() => handleEdit(item)}
-                                                        className="p-1.5 text-blue-400 hover:bg-blue-500/10 rounded transition-colors"
-                                                        title="Edit"
-                                                    >
-                                                        <Edit className="w-4 h-4" />
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleDelete(item.id)}
-                                                        className="p-1.5 text-red-400 hover:bg-red-500/10 rounded transition-colors"
-                                                        title="Delete"
-                                                    >
-                                                        <Trash2 className="w-4 h-4" />
-                                                    </button>
-                                                </div>
-                                            </td>
+                                            {showActions && (
+                                                <td className="px-6 py-4 text-center">
+                                                    <div className="flex items-center justify-center gap-2">
+                                                        {canEdit && (
+                                                            <button
+                                                                onClick={() => handleEdit(item)}
+                                                                className="p-1.5 text-blue-400 hover:bg-blue-500/10 rounded transition-colors"
+                                                                title="Edit"
+                                                            >
+                                                                <Edit className="w-4 h-4" />
+                                                            </button>
+                                                        )}
+                                                        {canDelete && (
+                                                            <button
+                                                                onClick={() => handleDelete(item.id)}
+                                                                className="p-1.5 text-red-400 hover:bg-red-500/10 rounded transition-colors"
+                                                                title="Delete"
+                                                            >
+                                                                <Trash2 className="w-4 h-4" />
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                            )}
                                         </tr>
                                     ))
                                 )}
