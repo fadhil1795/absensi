@@ -191,7 +191,6 @@ const RoleManagement = () => {
         const permKey = `${menuKey}.${op}`;
         const isAvailable = ALL_PERMISSION_DEFS.some(p => p.key === permKey);
         const isChecked = isAvailable && formData.permissions.includes(permKey);
-        const meta = OP_META[op];
 
         if (!isAvailable) {
             return (
