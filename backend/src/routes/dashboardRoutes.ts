@@ -122,9 +122,81 @@ router.get('/stats', authenticate, async (req: any, res) => {
             { name: 'Belum Absen', value: totalBelumAbsen, color: '#ef4444' }
         ];
 
+        // 9. Department Discipline & Attendance Rate (30 days)
+        let deptQuery = `
+            SELECT 
+                d.id,
+                d.nama as departemen_nama,
+                COUNT(DISTINCT k.id) as total_karyawan,
+                SUM(CASE WHEN r.status_kehadiran = 'Hadir' THEN 1 ELSE 0 END) as total_hadir,
+                SUM(CASE WHEN r.status_kehadiran = 'Terlambat' THEN 1 ELSE 0 END) as total_terlambat,
+                SUM(CASE WHEN r.status_kehadiran = 'Alpa' THEN 1 ELSE 0 END) as total_alpa,
+                COALESCE(
+                    ROUND(
+                        SUM(CASE WHEN r.status_kehadiran = 'Hadir' THEN 1 ELSE 0 END) * 100.0 / 
+                        NULLIF(SUM(CASE WHEN r.status_kehadiran IN ('Hadir', 'Terlambat', 'Alpa', 'Pulang Cepat') THEN 1 ELSE 0 END), 0),
+                        1
+                    ),
+                    0
+                ) as persentase_tepat_waktu
+            FROM departemen d
+            JOIN karyawan k ON k.departemen_id = d.id
+            LEFT JOIN rekap_absensi r ON r.karyawan_id = k.id AND r.tanggal >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+        `;
+        const deptParams: any[] = [];
+        if (instansiId) {
+            deptQuery += ' WHERE k.instansi_id = ?';
+            deptParams.push(instansiId);
+        }
+        deptQuery += ' GROUP BY d.id, d.nama ORDER BY persentase_tepat_waktu DESC, total_hadir DESC LIMIT 6';
+        const [deptRes] = await db.query<RowDataPacket[]>(deptQuery, deptParams);
+
+        // 10. Top 5 Karyawan Paling Sering Terlambat (60 Hari Terakhir / Terkini)
+        let lateQuery = `
+            SELECT 
+                k.id,
+                k.nama as karyawan_nama,
+                k.nik as karyawan_nik,
+                d.nama as departemen_nama,
+                COUNT(r.id) as total_terlambat,
+                COALESCE(SUM(r.terlambat_menit), 0) as total_menit_terlambat
+            FROM rekap_absensi r
+            JOIN karyawan k ON r.karyawan_id = k.id
+            LEFT JOIN departemen d ON k.departemen_id = d.id
+            WHERE r.status_kehadiran = 'Terlambat' 
+              AND r.tanggal >= DATE_SUB(CURDATE(), INTERVAL 60 DAY)
+        `;
+        const lateParams: any[] = [];
+        if (instansiId) {
+            lateQuery += ' AND (r.instansi_id = ? OR k.instansi_id = ?)';
+            lateParams.push(instansiId, instansiId);
+        }
+        lateQuery += ' GROUP BY k.id, k.nama, k.nik, d.nama ORDER BY total_terlambat DESC, total_menit_terlambat DESC LIMIT 5';
+        const [lateRes] = await db.query<RowDataPacket[]>(lateQuery, lateParams);
+
+        // 11. Multi-status 7-day trend
+        let breakdownQuery = `
+            SELECT 
+                DATE_FORMAT(tanggal, '%d/%m') as date_label,
+                DATE_FORMAT(tanggal, '%a') as day_name,
+                SUM(CASE WHEN status_kehadiran = 'Hadir' THEN 1 ELSE 0 END) as hadir,
+                SUM(CASE WHEN status_kehadiran = 'Terlambat' THEN 1 ELSE 0 END) as terlambat,
+                SUM(CASE WHEN status_kehadiran = 'Alpa' THEN 1 ELSE 0 END) as alpa,
+                SUM(CASE WHEN status_kehadiran IN ('Izin', 'Sakit', 'Cuti') THEN 1 ELSE 0 END) as izin
+            FROM rekap_absensi
+            WHERE tanggal >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+        `;
+        const breakdownParams: any[] = [];
+        if (instansiId) {
+            breakdownQuery += ' AND instansi_id = ?';
+            breakdownParams.push(instansiId);
+        }
+        breakdownQuery += ' GROUP BY tanggal, date_label, day_name ORDER BY tanggal ASC';
+        const [breakdownRes] = await db.query<RowDataPacket[]>(breakdownQuery, breakdownParams);
+
         res.json({
             total_karyawan: totalKaryawan,
-            total_instansi: instansiId ? 1 : 24, // Static if not super admin, or fetch valid count
+            total_instansi: instansiId ? 1 : 24,
             active_shifts: activeShifts,
             hadir_hari_ini: totalHadir,
             belum_absen: totalBelumAbsen,
@@ -135,9 +207,11 @@ router.get('/stats', authenticate, async (req: any, res) => {
             recent_logs: logsRes,
             daily_attendance: weeklyData,
             monthly_attendance: monthlyData,
-            attendance_distribution: distributionData
+            attendance_distribution: distributionData,
+            department_performance: deptRes,
+            top_late_employees: lateRes,
+            weekly_breakdown: breakdownRes
         });
-
     } catch (error) {
         console.error('Error fetching dashboard stats:', error);
         res.status(500).json({ error: 'Failed to fetch stats' });

@@ -1,7 +1,7 @@
-
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { Check, X, Plus, Trash2 } from 'lucide-react';
+import { Check, X, Plus, Trash2, Eye, Edit } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { API_BASE_URL } from '../config';
 
@@ -26,6 +26,7 @@ interface LeaveRequest {
 
 const LeaveManagement = () => {
     const { theme, isDarkMode } = useTheme();
+    const navigate = useNavigate();
     const user = JSON.parse(localStorage.getItem('user') || '{}');
     const isAdmin = user.role === 'SUPER_ADMIN' || user.role === 'ADMIN' || !!user.role_id;
     const [activeTab, setActiveTab] = useState<'my_leaves' | 'manage_requests' | 'leave_types'>(isAdmin ? 'manage_requests' : 'my_leaves');
@@ -35,11 +36,6 @@ const LeaveManagement = () => {
     const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
     const [myRequests, setMyRequests] = useState<LeaveRequest[]>([]);
     const [allRequests, setAllRequests] = useState<LeaveRequest[]>([]); // For Admins
-    const [karyawans, setKaryawans] = useState<{id: number, nama: string, nik: string}[]>([]);
-
-    // Forms
-    const [isApplyModalOpen, setIsApplyModalOpen] = useState(false);
-    const [applyForm, setApplyForm] = useState({ jenis_cuti_id: '', start_date: '', end_date: '', reason: '', karyawan_id: '' });
 
     // Admin Forms
     const [newTypeForm, setNewTypeForm] = useState({ nama: '', kuota: 12, is_paid: true });
@@ -61,12 +57,6 @@ const LeaveManagement = () => {
             setLeaveTypes(typesRes.data);
 
             if (isAdmin) {
-                // Fetch Karyawans for Dropdown (Needed for modal on any tab)
-                const karRes = await axios.get(`${API_BASE_URL}/api/karyawan`, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
-                setKaryawans(karRes.data);
-
                 if (activeTab === 'manage_requests') {
                     const reqRes = await axios.get(`${API_BASE_URL}/api/leaves/requests`, {
                         headers: { Authorization: `Bearer ${token}` }
@@ -84,31 +74,6 @@ const LeaveManagement = () => {
             console.error('Error fetching data:', error);
         } finally {
             setLoading(false);
-        }
-    };
-
-    const handleApplyLeave = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (isAdmin && !applyForm.karyawan_id) {
-            alert('Please select an employee');
-            return;
-        }
-
-        try {
-            await axios.post(`${API_BASE_URL}/api/leaves/apply`, {
-                ...applyForm,
-                karyawan_id: isAdmin ? applyForm.karyawan_id : user.id,
-                status: isAdmin ? 'APPROVED' : 'PENDING'
-            }, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            setIsApplyModalOpen(false);
-            setApplyForm({ jenis_cuti_id: '', start_date: '', end_date: '', reason: '', karyawan_id: '' });
-            fetchInitialData();
-            alert('Leave request submitted');
-        } catch (error) {
-            console.error(error);
-            alert('Failed to submit request');
         }
     };
 
@@ -151,6 +116,73 @@ const LeaveManagement = () => {
         }
     };
 
+    const handleDeleteRequest = async (id: number) => {
+        if (!confirm('Apakah Anda yakin ingin menghapus data cuti / izin ini?')) return;
+        try {
+            await axios.delete(`${API_BASE_URL}/api/leaves/requests/${id}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            fetchInitialData();
+        } catch (error) {
+            console.error('Error deleting leave request:', error);
+            alert('Gagal menghapus data cuti / izin');
+        }
+    };
+
+    const renderActionButtons = (req: LeaveRequest) => (
+        <div className="flex items-center gap-2">
+            {isAdmin && req.status === 'PENDING' && (
+                <>
+                    <button
+                        onClick={() => handleStatusUpdate(req.id, 'APPROVED')}
+                        className="p-2 bg-emerald-500/20 text-emerald-500 rounded-lg hover:bg-emerald-500/30 transition-colors"
+                        title="Approve"
+                    >
+                        <Check className="w-4 h-4" />
+                    </button>
+                    <button
+                        onClick={() => handleStatusUpdate(req.id, 'REJECTED')}
+                        className="p-2 bg-red-500/20 text-red-500 rounded-lg hover:bg-red-500/30 transition-colors"
+                        title="Reject"
+                    >
+                        <X className="w-4 h-4" />
+                    </button>
+                </>
+            )}
+
+            <span className={`px-3 py-1 rounded-full text-xs font-bold ${req.status === 'APPROVED' ? 'bg-emerald-500/10 text-emerald-500' :
+                req.status === 'REJECTED' ? 'bg-red-500/10 text-red-500' :
+                    'bg-amber-500/10 text-amber-500'
+                }`}>
+                {req.status}
+            </span>
+
+            <div className={`h-4 w-[1px] mx-1 ${isDarkMode ? 'bg-white/10' : 'bg-gray-200'}`} />
+
+            <button
+                onClick={() => navigate(`/dashboard/izin/view/${req.id}`)}
+                className={`p-2 rounded-lg transition-colors ${isDarkMode ? 'bg-white/5 text-gray-300 hover:bg-white/10 hover:text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-900'}`}
+                title="View Detail"
+            >
+                <Eye className="w-4 h-4" />
+            </button>
+            <button
+                onClick={() => navigate(`/dashboard/izin/edit/${req.id}`)}
+                className={`p-2 rounded-lg transition-colors ${isDarkMode ? 'bg-blue-500/10 text-blue-400 hover:bg-blue-500/20' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'}`}
+                title="Edit"
+            >
+                <Edit className="w-4 h-4" />
+            </button>
+            <button
+                onClick={() => handleDeleteRequest(req.id)}
+                className={`p-2 rounded-lg transition-colors ${isDarkMode ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20' : 'bg-red-50 text-red-600 hover:bg-red-100'}`}
+                title="Delete"
+            >
+                <Trash2 className="w-4 h-4" />
+            </button>
+        </div>
+    );
+
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center">
@@ -159,7 +191,7 @@ const LeaveManagement = () => {
                     <p className={theme.subTextColor}>Manage employee leave requests and policies.</p>
                 </div>
                 <button
-                    onClick={() => setIsApplyModalOpen(true)}
+                    onClick={() => navigate('/dashboard/izin/new')}
                     className={`bg-${theme.primary}-600 hover:bg-${theme.primary}-500 text-white px-4 py-2 rounded-lg flex items-center gap-2`}
                 >
                     <Plus className="w-4 h-4" />
@@ -208,21 +240,14 @@ const LeaveManagement = () => {
                                     <p className="text-gray-400">No leave requests found.</p>
                                 ) : (
                                     myRequests.map(req => (
-                                        <div key={req.id} className={`${theme.cardBg} border ${theme.cardBorder} p-4 rounded-xl flex justify-between items-center`}>
+                                        <div key={req.id} className={`${theme.cardBg} border ${theme.cardBorder} p-4 rounded-xl flex flex-col md:flex-row justify-between md:items-center gap-4`}>
                                             <div>
                                                 <div className={`font-bold ${theme.headingColor}`}>{req.jenis_cuti}</div>
                                                 <div className={`text-sm ${theme.subTextColor}`}>Nama: {req.nama_karyawan || user.nama}</div>
                                                 <div className={`text-sm ${theme.subTextColor}`}>{req.start_date.substring(0, 10)} to {req.end_date.substring(0, 10)}</div>
                                                 <div className={`text-sm ${theme.subTextColor} mt-1`}>{req.reason}</div>
                                             </div>
-                                            <div>
-                                                <span className={`px-3 py-1 rounded-full text-xs font-bold ${req.status === 'APPROVED' ? 'bg-emerald-500/10 text-emerald-500' :
-                                                    req.status === 'REJECTED' ? 'bg-red-500/10 text-red-500' :
-                                                        'bg-amber-500/10 text-amber-500'
-                                                    }`}>
-                                                    {req.status}
-                                                </span>
-                                            </div>
+                                            {renderActionButtons(req)}
                                         </div>
                                     ))
                                 )}
@@ -236,7 +261,7 @@ const LeaveManagement = () => {
                                     <p className="text-gray-400">No pending requests.</p>
                                 ) : (
                                     allRequests.map(req => (
-                                        <div key={req.id} className={`${theme.cardBg} border ${theme.cardBorder} p-4 rounded-xl flex flex-col md:flex-row justify-between gap-4`}>
+                                        <div key={req.id} className={`${theme.cardBg} border ${theme.cardBorder} p-4 rounded-xl flex flex-col md:flex-row justify-between md:items-center gap-4`}>
                                             <div>
                                                 <div className={`font-bold ${theme.headingColor}`}>{req.nama_karyawan}</div>
                                                 <div className={`${isDarkMode ? 'text-indigo-400' : `text-${theme.primary}-600`} text-sm`}>{req.jenis_cuti}</div>
@@ -245,32 +270,7 @@ const LeaveManagement = () => {
                                                 </div>
                                                 <div className={`text-sm ${theme.subTextColor} mt-1 italic`}>"{req.reason}"</div>
                                             </div>
-                                            <div className="flex items-center gap-3">
-                                                {req.status === 'PENDING' ? (
-                                                    <>
-                                                        <button
-                                                            onClick={() => handleStatusUpdate(req.id, 'APPROVED')}
-                                                            className="p-2 bg-emerald-500/20 text-emerald-500 rounded-lg hover:bg-emerald-500/30"
-                                                            title="Approve"
-                                                        >
-                                                            <Check className="w-5 h-5" />
-                                                        </button>
-                                                        <button
-                                                            onClick={() => handleStatusUpdate(req.id, 'REJECTED')}
-                                                            className="p-2 bg-red-500/20 text-red-500 rounded-lg hover:bg-red-500/30"
-                                                            title="Reject"
-                                                        >
-                                                            <X className="w-5 h-5" />
-                                                        </button>
-                                                    </>
-                                                ) : (
-                                                    <span className={`px-3 py-1 rounded-full text-xs font-bold ${req.status === 'APPROVED' ? 'bg-emerald-500/10 text-emerald-500' :
-                                                        'bg-red-500/10 text-red-500'
-                                                        }`}>
-                                                        {req.status}
-                                                    </span>
-                                                )}
-                                            </div>
+                                            {renderActionButtons(req)}
                                         </div>
                                     ))
                                 )}
@@ -340,89 +340,6 @@ const LeaveManagement = () => {
                     </>
                 )}
             </div>
-
-            {/* Apply Modal */}
-            {isApplyModalOpen && (
-                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className={`${theme.cardBg} border ${theme.cardBorder} rounded-xl w-full max-w-md p-6 shadow-xl`}>
-                        <div className="flex justify-between items-center mb-6">
-                            <h2 className={`text-xl font-bold ${theme.headingColor}`}>Apply for Leave</h2>
-                            <button onClick={() => setIsApplyModalOpen(false)} className={`${theme.subTextColor} hover:${theme.headingColor}`}>
-                                <X className="w-6 h-6" />
-                            </button>
-                        </div>
-                        <form onSubmit={handleApplyLeave} className="space-y-4">
-                            {isAdmin && (
-                                <div>
-                                    <label className={`block text-sm ${theme.subTextColor} mb-1`}>Pilih Karyawan</label>
-                                    <select
-                                        className={`w-full ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-gray-50 text-gray-900'} border ${theme.cardBorder} rounded-lg px-4 py-2 focus:border-${theme.primary}-500 outline-none`}
-                                        value={applyForm.karyawan_id}
-                                        onChange={e => setApplyForm({ ...applyForm, karyawan_id: e.target.value })}
-                                        required
-                                    >
-                                        <option value="">Pilih Karyawan...</option>
-                                        {karyawans.map(k => (
-                                            <option key={k.id} value={k.id}>{k.nama} ({k.nik})</option>
-                                        ))}
-                                    </select>
-                                </div>
-                            )}
-
-                            <div>
-                                <label className={`block text-sm ${theme.subTextColor} mb-1`}>Leave Type</label>
-                                <select
-                                    className={`w-full ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-gray-50 text-gray-900'} border ${theme.cardBorder} rounded-lg px-4 py-2 focus:border-${theme.primary}-500 outline-none`}
-                                    value={applyForm.jenis_cuti_id}
-                                    onChange={e => setApplyForm({ ...applyForm, jenis_cuti_id: e.target.value })}
-                                    required
-                                >
-                                    <option value="">Select Type</option>
-                                    {leaveTypes.map(t => (
-                                        <option key={t.id} value={t.id}>{t.nama} ({t.kuota} days)</option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className={`block text-sm ${theme.subTextColor} mb-1`}>Start Date</label>
-                                    <input
-                                        type="date"
-                                        className={`w-full ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-gray-50 text-gray-900'} border ${theme.cardBorder} rounded-lg px-4 py-2 focus:border-${theme.primary}-500 outline-none`}
-                                        value={applyForm.start_date}
-                                        onChange={e => setApplyForm({ ...applyForm, start_date: e.target.value })}
-                                        required
-                                    />
-                                </div>
-                                <div>
-                                    <label className={`block text-sm ${theme.subTextColor} mb-1`}>End Date</label>
-                                    <input
-                                        type="date"
-                                        className={`w-full ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-gray-50 text-gray-900'} border ${theme.cardBorder} rounded-lg px-4 py-2 focus:border-${theme.primary}-500 outline-none`}
-                                        value={applyForm.end_date}
-                                        onChange={e => setApplyForm({ ...applyForm, end_date: e.target.value })}
-                                        required
-                                    />
-                                </div>
-                            </div>
-                            <div>
-                                <label className={`block text-sm ${theme.subTextColor} mb-1`}>Reason</label>
-                                <textarea
-                                    className={`w-full ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-gray-50 text-gray-900'} border ${theme.cardBorder} rounded-lg px-4 py-2 focus:border-${theme.primary}-500 outline-none h-24 resize-none`}
-                                    value={applyForm.reason}
-                                    onChange={e => setApplyForm({ ...applyForm, reason: e.target.value })}
-                                    required
-                                    placeholder="Why do you need leave?"
-                                />
-                            </div>
-                            <div className="pt-4 flex justify-end gap-3">
-                                <button type="button" onClick={() => setIsApplyModalOpen(false)} className={`px-4 py-2 ${theme.subTextColor} hover:${theme.headingColor}`}>Cancel</button>
-                                <button type="submit" className={`bg-${theme.primary}-600 hover:bg-${theme.primary}-500 text-white px-6 py-2 rounded-lg font-medium`}>Submit Request</button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            )}
         </div>
     );
 };

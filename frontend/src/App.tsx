@@ -13,6 +13,7 @@ import ShiftManagement from './pages/ShiftManagement';
 import MesinManagement from './pages/MesinManagement';
 import DepartemenManagement from './pages/DepartemenManagement';
 import LeaveManagement from './pages/LeaveManagement';
+import LeaveFormPage from './pages/LeaveFormPage';
 import HolidayManagement from './pages/HolidayManagement';
 import RekapAbsensi from './pages/RekapAbsensi';
 import RealtimeAbsensi from './pages/RealtimeAbsensi';
@@ -69,6 +70,9 @@ function App() {
             <Route path="realtime" element={<RealtimeAbsensi />} />
             <Route path="audit-logs" element={<AuditLog />} />
             <Route path="izin" element={<LeaveManagement />} />
+            <Route path="izin/new" element={<LeaveFormPage />} />
+            <Route path="izin/edit/:id" element={<LeaveFormPage />} />
+            <Route path="izin/view/:id" element={<LeaveFormPage />} />
             <Route path="holidays" element={<HolidayManagement />} />
             <Route path="information" element={<InformationManagement />} />
             <Route path="schedule" element={<ScheduleManagement />} />

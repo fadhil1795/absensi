@@ -1,11 +1,21 @@
 import { Router } from 'express';
 import db from '../db';
 import { authenticate, authorize } from '../middleware/authMiddleware';
-import { AuthRequest } from '../middleware/authMiddleware'; // Assuming strict type export, or adjust if AuthRequest is not exported
+import { AuthRequest } from '../middleware/authMiddleware';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import { rekapService } from '../services/rekapService';
 
 const router = Router();
+
+const formatLocalDate = (d: any): string => {
+    if (!d) return '';
+    if (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+    const dateObj = new Date(d);
+    const y = dateObj.getFullYear();
+    const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const day = String(dateObj.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+};
 
 // ==========================================
 // JENIS CUTI (Leave Types)
@@ -15,16 +25,14 @@ const router = Router();
 router.get('/types', authenticate, async (req: any, res) => {
     try {
         const { instansi_id } = req.user;
-        // Super Admin might want to see all or specific instansi, but for now filtering by user's instansi
-        // If super admin and query param exists, use that?
         let query = 'SELECT * FROM jenis_cuti WHERE (instansi_id = ? OR instansi_id IS NULL)';
-        const params: any[] = [instansi_id || 0]; // 0 or whatever if super admin sans instansi?
+        const params: any[] = [instansi_id || 0];
 
         if (req.user.role === 'SUPER_ADMIN' && req.query.instansi_id) {
             query = 'SELECT * FROM jenis_cuti WHERE (instansi_id = ? OR instansi_id IS NULL)';
             params[0] = req.query.instansi_id;
         } else if (req.user.role === 'SUPER_ADMIN') {
-            query = 'SELECT * FROM jenis_cuti'; // Show all for super admin if no filter?
+            query = 'SELECT * FROM jenis_cuti';
             params.length = 0;
         }
 
@@ -42,7 +50,6 @@ router.post('/types', authenticate, async (req: any, res) => {
         return res.status(403).json({ error: 'Unauthorized' });
     }
     const { nama, kuota, is_paid, instansi_id } = req.body;
-    // If Admin, force their instansi_id. If Super Admin, use provided or default.
     const targetInstansiId = req.user.role === 'SUPER_ADMIN' ? (instansi_id || null) : req.user.instansi_id;
 
     try {
@@ -154,7 +161,11 @@ router.get('/requests', authenticate, async (req: AuthRequest, res) => {
     try {
         const { instansi_id } = req.query;
         let query = `
-            SELECT i.*, k.nama as nama_karyawan, jc.nama as jenis_cuti, jc.is_paid
+            SELECT i.*, 
+                   DATE_FORMAT(i.start_date, '%Y-%m-%d') as start_date,
+                   DATE_FORMAT(i.end_date, '%Y-%m-%d') as end_date,
+                   k.nama as nama_karyawan, k.nik as nik_karyawan,
+                   jc.nama as jenis_cuti, jc.is_paid
             FROM cuti i
             JOIN karyawan k ON i.karyawan_id = k.id
             JOIN jenis_cuti jc ON i.jenis_cuti_id = jc.id
@@ -181,6 +192,34 @@ router.get('/requests', authenticate, async (req: AuthRequest, res) => {
     }
 });
 
+// GET single leave request by ID
+router.get('/requests/:id', authenticate, async (req: any, res) => {
+    const { id } = req.params;
+    try {
+        const [rows] = await db.query<RowDataPacket[]>(
+            `SELECT i.*, 
+                    DATE_FORMAT(i.start_date, '%Y-%m-%d') as start_date,
+                    DATE_FORMAT(i.end_date, '%Y-%m-%d') as end_date,
+                    k.nama as nama_karyawan, k.nik as nik_karyawan, k.departemen,
+                    jc.nama as jenis_cuti, jc.is_paid, jc.kuota
+             FROM cuti i
+             JOIN karyawan k ON i.karyawan_id = k.id
+             JOIN jenis_cuti jc ON i.jenis_cuti_id = jc.id
+             WHERE i.id = ?`,
+            [id]
+        );
+
+        if (rows.length === 0) {
+            return res.status(404).json({ error: 'Leave request not found' });
+        }
+
+        res.json(rows[0]);
+    } catch (error) {
+        console.error('Error fetching leave request detail:', error);
+        res.status(500).json({ error: 'Failed to fetch leave request detail' });
+    }
+});
+
 // Apply for Leave
 router.post('/apply', authenticate, async (req: any, res) => {
     const { karyawan_id, jenis_cuti_id, start_date, end_date, reason, status: statusFromBody } = req.body;
@@ -199,8 +238,8 @@ router.post('/apply', authenticate, async (req: any, res) => {
             const [karyawan] = await db.query<RowDataPacket[]>('SELECT instansi_id FROM karyawan WHERE id = ?', [karyawan_id]);
             if (karyawan.length > 0) {
                 const instansiId = karyawan[0].instansi_id;
-                const formattedStart = new Date(start_date).toISOString().split('T')[0];
-                const formattedEnd = new Date(end_date).toISOString().split('T')[0];
+                const formattedStart = formatLocalDate(start_date);
+                const formattedEnd = formatLocalDate(end_date);
                 await rekapService.processRekapRange(instansiId, formattedStart, formattedEnd);
             }
         }
@@ -209,6 +248,92 @@ router.post('/apply', authenticate, async (req: any, res) => {
     } catch (error) {
         console.error('Error applying for leave:', error);
         res.status(500).json({ error: 'Failed to apply for leave' });
+    }
+});
+
+// Update Leave Request (Edit)
+router.put('/requests/:id', authenticate, async (req: any, res) => {
+    const { id } = req.params;
+    const { karyawan_id, jenis_cuti_id, start_date, end_date, reason, status } = req.body;
+
+    try {
+        const [existing] = await db.query<RowDataPacket[]>(
+            `SELECT c.*, k.instansi_id 
+             FROM cuti c 
+             JOIN karyawan k ON c.karyawan_id = k.id 
+             WHERE c.id = ?`,
+            [id]
+        );
+
+        if (existing.length === 0) {
+            return res.status(404).json({ error: 'Leave request not found' });
+        }
+
+        const oldLeave = existing[0];
+        const targetKaryawanId = karyawan_id || oldLeave.karyawan_id;
+        const targetJenisCutiId = jenis_cuti_id || oldLeave.jenis_cuti_id;
+        const targetStartDate = start_date || formatLocalDate(oldLeave.start_date);
+        const targetEndDate = end_date || formatLocalDate(oldLeave.end_date);
+        const targetReason = reason !== undefined ? reason : oldLeave.reason;
+        const targetStatus = status || oldLeave.status;
+
+        await db.query(
+            `UPDATE cuti 
+             SET karyawan_id = ?, jenis_cuti_id = ?, start_date = ?, end_date = ?, reason = ?, status = ?
+             WHERE id = ?`,
+            [targetKaryawanId, targetJenisCutiId, targetStartDate, targetEndDate, targetReason, targetStatus, id]
+        );
+
+        // Re-sync rekap for old range and new range
+        const oldStart = formatLocalDate(oldLeave.start_date);
+        const oldEnd = formatLocalDate(oldLeave.end_date);
+        if (oldLeave.instansi_id && oldStart && oldEnd) {
+            await rekapService.processRekapRange(oldLeave.instansi_id, oldStart, oldEnd);
+        }
+
+        const [newKar] = await db.query<RowDataPacket[]>('SELECT instansi_id FROM karyawan WHERE id = ?', [targetKaryawanId]);
+        if (newKar.length > 0 && targetStartDate && targetEndDate) {
+            await rekapService.processRekapRange(newKar[0].instansi_id, formatLocalDate(targetStartDate), formatLocalDate(targetEndDate));
+        }
+
+        res.json({ message: 'Leave request updated successfully' });
+    } catch (error) {
+        console.error('Error updating leave request:', error);
+        res.status(500).json({ error: 'Failed to update leave request' });
+    }
+});
+
+// Delete Leave Request
+router.delete('/requests/:id', authenticate, async (req: any, res) => {
+    const { id } = req.params;
+
+    try {
+        const [existing] = await db.query<RowDataPacket[]>(
+            `SELECT c.*, k.instansi_id 
+             FROM cuti c 
+             JOIN karyawan k ON c.karyawan_id = k.id 
+             WHERE c.id = ?`,
+            [id]
+        );
+
+        if (existing.length === 0) {
+            return res.status(404).json({ error: 'Leave request not found' });
+        }
+
+        const oldLeave = existing[0];
+        await db.query('DELETE FROM cuti WHERE id = ?', [id]);
+
+        // Re-sync rekap so deleted leave reverts attendance status properly
+        const oldStart = formatLocalDate(oldLeave.start_date);
+        const oldEnd = formatLocalDate(oldLeave.end_date);
+        if (oldLeave.instansi_id && oldStart && oldEnd) {
+            await rekapService.processRekapRange(oldLeave.instansi_id, oldStart, oldEnd);
+        }
+
+        res.json({ message: 'Leave request deleted successfully' });
+    } catch (error) {
+        console.error('Error deleting leave request:', error);
+        res.status(500).json({ error: 'Failed to delete leave request' });
     }
 });
 
@@ -226,17 +351,15 @@ router.put('/requests/:id/status', authenticate, async (req: any, res) => {
             [status, req.user.id, id]
         );
 
-        if (status === 'APPROVED') {
-            const [leaveReq] = await db.query<RowDataPacket[]>(
-                'SELECT c.karyawan_id, c.start_date, c.end_date, k.instansi_id FROM cuti c JOIN karyawan k ON c.karyawan_id = k.id WHERE c.id = ?',
-                [id]
-            );
-            if (leaveReq.length > 0) {
-                const { instansi_id, start_date, end_date } = leaveReq[0];
-                const formattedStart = new Date(start_date).toISOString().split('T')[0];
-                const formattedEnd = new Date(end_date).toISOString().split('T')[0];
-                await rekapService.processRekapRange(instansi_id, formattedStart, formattedEnd);
-            }
+        const [leaveReq] = await db.query<RowDataPacket[]>(
+            'SELECT c.karyawan_id, c.start_date, c.end_date, k.instansi_id FROM cuti c JOIN karyawan k ON c.karyawan_id = k.id WHERE c.id = ?',
+            [id]
+        );
+        if (leaveReq.length > 0) {
+            const { instansi_id, start_date, end_date } = leaveReq[0];
+            const formattedStart = formatLocalDate(start_date);
+            const formattedEnd = formatLocalDate(end_date);
+            await rekapService.processRekapRange(instansi_id, formattedStart, formattedEnd);
         }
 
         res.json({ message: `Leave request ${status}` });

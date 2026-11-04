@@ -316,22 +316,102 @@ router.delete('/:id', authenticate, checkPermission('rekap.delete'), async (req:
 // 5. UPDATE REKAP (PUT /:id) — membutuhkan rekap.edit
 router.put('/:id', authenticate, checkPermission('rekap.edit'), async (req: any, res) => {
     const { id } = req.params;
-    const { jam_masuk, jam_pulang, status_kehadiran } = req.body;
+    const { jam_masuk, jam_pulang, status_kehadiran, alasan } = req.body;
 
     try {
+        // Ambil data sebelum update untuk audit trail
+        const [oldRows] = await db.query<RowDataPacket[]>(
+            `SELECT r.*, r.jam_keluar as jam_pulang, k.nama as karyawan_nama, k.nik as karyawan_nik
+             FROM rekap_absensi r
+             JOIN karyawan k ON r.karyawan_id = k.id
+             WHERE r.id = ?`,
+            [id]
+        );
+
+        if (!oldRows.length) {
+            return res.status(404).json({ error: 'Record not found' });
+        }
+
+        const oldRecord = oldRows[0];
+        const beforeData = {
+            jam_masuk: oldRecord.jam_masuk,
+            jam_pulang: oldRecord.jam_pulang,
+            status_kehadiran: oldRecord.status_kehadiran
+        };
+
+        const afterData = {
+            jam_masuk: jam_masuk !== undefined ? jam_masuk : oldRecord.jam_masuk,
+            jam_pulang: jam_pulang !== undefined ? jam_pulang : oldRecord.jam_pulang,
+            status_kehadiran: status_kehadiran || oldRecord.status_kehadiran
+        };
+
         await rekapService.updateManualRekap(Number(id), {
             jam_masuk: jam_masuk || undefined,
             jam_keluar: jam_pulang || undefined,
             status_kehadiran
         });
 
-        // Log Update
-        logAction(req.user?.id, req.user?.nama, 'UPDATE_REKAP', { id, updates: req.body, ip: req.ip });
+        // Log Update dengan detail sebelum dan sesudah
+        const logDetail = {
+            rekap_id: Number(id),
+            id: Number(id),
+            karyawan_id: oldRecord.karyawan_id,
+            karyawan_nama: oldRecord.karyawan_nama,
+            karyawan_nik: oldRecord.karyawan_nik,
+            tanggal: oldRecord.tanggal ? formatDate(new Date(oldRecord.tanggal)) : null,
+            before: beforeData,
+            after: afterData,
+            alasan: alasan || 'Tidak ada keterangan',
+            admin_role: req.user?.role_name || req.user?.role || 'Admin',
+            ip: req.ip
+        };
 
-        res.json({ message: 'Record updated successfully' });
+        await logAction(req.user?.id, req.user?.nama || req.user?.username, 'UPDATE_REKAP', logDetail, req.ip);
+
+        res.json({ message: 'Record updated successfully', details: logDetail });
     } catch (error: any) {
         console.error('Error updating rekap:', error);
         res.status(500).json({ error: 'Failed to update record', details: error.message });
+    }
+});
+
+// 6. GET REKAP EDIT HISTORY (GET /:id/history) — membutuhkan rekap.view
+router.get('/:id/history', authenticate, checkPermission('rekap.view'), async (req: any, res) => {
+    const { id } = req.params;
+
+    try {
+        const [logs] = await db.query<RowDataPacket[]>(
+            `SELECT id, user_id, user_name, action, details, ip_address, created_at
+             FROM audit_logs
+             WHERE action = 'UPDATE_REKAP'
+               AND (details LIKE ? OR details LIKE ? OR details LIKE ?)
+             ORDER BY created_at DESC`,
+            [`%"rekap_id":${id}%`, `%"id":"${id}"%`, `%"id":${id}%`]
+        );
+
+        const history = logs.map(l => {
+            let parsedDetails: any = {};
+            try {
+                parsedDetails = JSON.parse(l.details);
+            } catch (e) {
+                parsedDetails = { raw: l.details };
+            }
+            return {
+                id: l.id,
+                user_id: l.user_id,
+                user_name: l.user_name,
+                created_at: l.created_at,
+                before: parsedDetails.before || null,
+                after: parsedDetails.after || parsedDetails.updates || null,
+                alasan: parsedDetails.alasan || '-',
+                admin_role: parsedDetails.admin_role || '-'
+            };
+        });
+
+        res.json(history);
+    } catch (error: any) {
+        console.error('Error fetching rekap history:', error);
+        res.status(500).json({ error: 'Failed to fetch history', details: error.message });
     }
 });
 
