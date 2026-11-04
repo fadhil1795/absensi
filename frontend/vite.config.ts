@@ -7,4 +7,18 @@ export default defineConfig({
   build: {
     chunkSizeWarningLimit: 1600,
   },
+  optimizeDeps: {
+    include: [
+      'react',
+      'react-dom',
+      'react-router-dom',
+      'axios',
+      'lucide-react',
+      'recharts',
+      'date-fns',
+      'jspdf',
+      'jspdf-autotable',
+      'xlsx'
+    ],
+  },
 })
