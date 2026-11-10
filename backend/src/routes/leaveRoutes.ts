@@ -418,9 +418,12 @@ router.post('/apply', authenticate, checkPermission('leaves.add'), upload.single
             attachment_key: attachmentKey,
             storage_provider: storageProvider
         });
-    } catch (error) {
+    } catch (error: any) {
         console.error('Error applying for leave:', error);
-        res.status(500).json({ error: 'Failed to apply for leave' });
+        res.status(500).json({ 
+            error: 'Failed to apply for leave',
+            details: error?.message || String(error)
+        });
     }
 });
 
@@ -519,9 +522,12 @@ router.put('/requests/:id', authenticate, checkPermission('leaves.edit'), upload
         }
 
         res.json({ message: 'Leave request updated successfully' });
-    } catch (error) {
+    } catch (error: any) {
         console.error('Error updating leave request:', error);
-        res.status(500).json({ error: 'Failed to update leave request' });
+        res.status(500).json({ 
+            error: 'Failed to update leave request',
+            details: error?.message || String(error)
+        });
     }
 });
 

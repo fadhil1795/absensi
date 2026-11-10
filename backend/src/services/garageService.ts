@@ -2,11 +2,29 @@ import crypto from 'crypto';
 import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 
 export interface GarageUploadResult {
     key: string;
     provider: 'garage' | 'local';
     url: string;
+}
+
+function getLocalBaseDir(): string {
+    const defaultDir = path.join(__dirname, '../../uploads');
+    try {
+        fs.mkdirSync(defaultDir, { recursive: true });
+        // Test write permission for serverless/read-only filesystem environments (e.g. Vercel)
+        const testFile = path.join(defaultDir, `.write_test_${Date.now()}`);
+        fs.writeFileSync(testFile, 'ok');
+        fs.unlinkSync(testFile);
+        return defaultDir;
+    } catch {
+        // Fallback to OS temp directory which is always writable in serverless/AWS Lambda/Vercel
+        const tmpDir = path.join(os.tmpdir(), 'absensi_uploads');
+        fs.mkdirSync(tmpDir, { recursive: true });
+        return tmpDir;
+    }
 }
 
 function hmacSha256(key: Buffer | string, data: string): Buffer {
@@ -145,9 +163,10 @@ export const garageService = {
         }
 
         // Fallback to local uploads folder if Garage HQ is not configured yet
-        const localDir = path.join(__dirname, '../../uploads', path.dirname(cleanKey));
+        const baseDir = getLocalBaseDir();
+        const localDir = path.join(baseDir, path.dirname(cleanKey));
         fs.mkdirSync(localDir, { recursive: true });
-        const localFilePath = path.join(__dirname, '../../uploads', cleanKey);
+        const localFilePath = path.join(baseDir, cleanKey);
         fs.writeFileSync(localFilePath, buffer);
 
         return {
@@ -176,21 +195,35 @@ export const garageService = {
                 };
             } catch (err) {
                 // Check local fallback if object was previously stored locally
-                const localFilePath = path.join(__dirname, '../../uploads', cleanKey);
+                const baseDir = getLocalBaseDir();
+                const localFilePath = path.join(baseDir, cleanKey);
                 if (fs.existsSync(localFilePath)) {
                     return { buffer: fs.readFileSync(localFilePath) };
+                }
+                const defaultPath = path.join(__dirname, '../../uploads', cleanKey);
+                if (fs.existsSync(defaultPath)) {
+                    return { buffer: fs.readFileSync(defaultPath) };
                 }
                 throw err;
             }
         }
 
-        const localFilePath = path.join(__dirname, '../../uploads', cleanKey);
-        if (!fs.existsSync(localFilePath)) {
-            throw new Error('Attachment file not found');
+        const baseDir = getLocalBaseDir();
+        const localFilePath = path.join(baseDir, cleanKey);
+        if (fs.existsSync(localFilePath)) {
+            return {
+                buffer: fs.readFileSync(localFilePath)
+            };
         }
-        return {
-            buffer: fs.readFileSync(localFilePath)
-        };
+
+        const defaultPath = path.join(__dirname, '../../uploads', cleanKey);
+        if (fs.existsSync(defaultPath)) {
+            return {
+                buffer: fs.readFileSync(defaultPath)
+            };
+        }
+
+        throw new Error('Attachment file not found');
     },
 
     /**

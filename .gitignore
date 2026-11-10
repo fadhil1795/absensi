@@ -35,3 +35,5 @@ mismatch_log.txt
 debug_output.txt
 .gitignore
 .env
+backend/.env
+backend\.env

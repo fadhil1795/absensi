@@ -215,7 +215,11 @@ const LeaveFormPage = () => {
             navigate('/dashboard/izin');
         } catch (error: any) {
             console.error('Error submitting leave request:', error);
-            alert(error.response?.data?.error || 'Failed to submit request');
+            const errRes = error.response?.data;
+            const message = errRes?.details 
+                ? `${errRes.error || 'Failed to submit'}: ${errRes.details}`
+                : (errRes?.error || error.message || 'Failed to submit request');
+            alert(message);
         } finally {
             setSaving(false);
         }
