@@ -68,29 +68,52 @@ const KaryawanManagement = () => {
         const file = event.target.files?.[0];
         if (!file) return;
 
+        const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+        const defaultInstansiId = currentUser?.instansi_id || (selectedInstansi ? Number(selectedInstansi) : null);
+
         const reader = new FileReader();
         reader.onload = async (e) => {
             const text = e.target?.result as string;
             if (!text) return;
 
-            const lines = text.split('\n');
+            const lines = text.split(/\r?\n/);
             const data = lines
-                .slice(1) // Skip header assuming it exists, or check first line
+                .slice(1) // Skip header
                 .filter(line => line.trim() !== '')
                 .map(line => {
-                    const [pin, nik, nama, departemen, instansi_id] = line.split(',');
+                    const parts = line.split(',').map(s => s?.trim());
+                    const pin = parts[0];
+                    let nik = parts[1];
+                    let nama = parts[2];
+                    let departemen = parts[3] || '';
+                    let instansi_id = parts[4] || defaultInstansiId;
+
+                    // If file only has 2 columns: pin, nama
+                    if (parts.length === 2) {
+                        nik = parts[0];
+                        nama = parts[1];
+                        departemen = '';
+                        instansi_id = defaultInstansiId;
+                    } else if (parts.length === 3) {
+                        // pin, nik, nama
+                        nama = parts[2];
+                        instansi_id = defaultInstansiId;
+                    }
+
+                    if (!nik) nik = pin;
+
                     return {
-                        pin: pin?.trim(),
-                        nik: nik?.trim(),
-                        nama: nama?.trim(),
-                        departemen: departemen?.trim(),
-                        instansi_id: instansi_id?.trim()
+                        pin,
+                        nik,
+                        nama,
+                        departemen,
+                        instansi_id: instansi_id ? Number(instansi_id) : defaultInstansiId
                     };
                 })
-                .filter(item => item.pin && item.nik && item.nama && item.instansi_id); // Basic validation
+                .filter(item => item.pin && item.nama && (item.instansi_id || currentUser.role !== 'SUPER_ADMIN'));
 
             if (data.length === 0) {
-                alert('No valid data found in CSV.');
+                alert('No valid data found in CSV. Pastikan kolom pin dan nama terisi.');
                 return;
             }
 

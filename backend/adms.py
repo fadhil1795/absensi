@@ -233,6 +233,8 @@ def getrequest():
     return Response(commands, mimetype='text/plain')
 
 
+
+
 @app.route('/iclock/receive_attendance', methods=['POST'])
 def receive_attendance():
     """Fallback untuk beberapa firmware mesin tipe baru."""
